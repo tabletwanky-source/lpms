@@ -1,199 +1,233 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Check, Crown, Zap, Loader as Loader2, X } from 'lucide-react';
-import { products, Product } from '../../stripe-config';
+import { Check, Loader as Loader2, Crown, Star } from 'lucide-react';
+import { STRIPE_PRODUCTS } from '../../stripe-config';
 import { supabase } from '../../lib/supabase';
 
 interface PlanSelectorProps {
-  currentPriceId?: string | null;
-  onClose?: () => void;
+  currentPriceId?: string;
 }
 
-export default function PlanSelector({ currentPriceId, onClose }: PlanSelectorProps) {
+export default function PlanSelector({ currentPriceId }: PlanSelectorProps) {
   const [loading, setLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string>('');
 
-  const createCheckoutSession = async (product: Product) => {
-    setLoading(product.priceId);
-
+  const handleUpgrade = async (priceId: string) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.access_token) {
-        throw new Error('Not authenticated');
+      setLoading(priceId);
+      setError('');
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setError('Please sign in to upgrade your plan');
+        return;
       }
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-checkout`, {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout`, {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          price_id: product.priceId,
-          mode: product.mode,
-          success_url: `${window.location.origin}/success`,
-          cancel_url: `${window.location.origin}/pricing`,
+          priceId,
+          successUrl: `${window.location.origin}/success`,
+          cancelUrl: window.location.href,
         }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create checkout session');
+        throw new Error('Failed to create checkout session');
       }
 
-      window.location.href = data.url;
-    } catch (error) {
-      console.error('Error creating checkout session:', error);
-      // You could show a toast notification here instead of alert
-      alert(error instanceof Error ? error.message : 'Something went wrong');
+      const { url } = await response.json();
+      if (url) {
+        window.location.href = url;
+      }
+    } catch (err) {
+      console.error('Checkout error:', err);
+      setError('Failed to start checkout. Please try again.');
     } finally {
       setLoading(null);
     }
   };
 
-  const getIcon = (productName: string) => {
-    switch (productName) {
-      case 'LMS2':
-        return Crown;
-      case 'LMS':
-        return Zap;
-      default:
-        return Check;
-    }
-  };
-
-  const isCurrentPlan = (priceId: string) => currentPriceId === priceId;
+  const basicProduct = STRIPE_PRODUCTS.find(p => p.name === 'LUMINA BASIC')!;
+  const proProduct = STRIPE_PRODUCTS.find(p => p.name === 'LUMINA PRO')!;
 
   return (
-    <div className="space-y-8">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-slate-900 mb-4">Choose Your Plan</h1>
-        <p className="text-slate-600">Select the perfect plan for your learning management needs</p>
+    <div className="max-w-4xl mx-auto">
+      <div className="text-center mb-12">
+        <h1 className="text-4xl font-bold text-slate-900 mb-4">Choose Your Plan</h1>
+        <p className="text-xl text-slate-600">Upgrade your hotel management experience</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-        {products.map((product) => {
-          const Icon = getIcon(product.name);
-          const isCurrent = isCurrentPlan(product.priceId);
-          const isLoadingThis = loading === product.priceId;
-          
-          return (
-            <motion.div
-              key={product.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`relative bg-white rounded-2xl border-2 p-8 transition-all hover:shadow-lg ${
-                product.name === 'LMS2' 
-                  ? 'border-purple-200 ring-2 ring-purple-100' 
-                  : 'border-slate-200 hover:border-indigo-200'
-              } ${isCurrent ? 'ring-2 ring-emerald-200 border-emerald-300' : ''}`}
-            >
-              {product.name === 'LMS2' && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                  <div className="bg-purple-600 text-white px-4 py-1 rounded-full text-xs font-bold">
-                    PREMIUM
-                  </div>
-                </div>
-              )}
-
-              {isCurrent && (
-                <div className="absolute -top-4 right-4">
-                  <div className="bg-emerald-600 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                    <Check size={12} />
-                    CURRENT
-                  </div>
-                </div>
-              )}
-
-              <div className="text-center mb-6">
-                <div className={`w-12 h-12 mx-auto mb-4 rounded-xl flex items-center justify-center ${
-                  product.name === 'LMS2' ? 'bg-purple-100 text-purple-600' : 'bg-indigo-100 text-indigo-600'
-                }`}>
-                  <Icon size={24} />
-                </div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-2">{product.name}</h3>
-                <p className="text-slate-600 text-sm">{product.description}</p>
-              </div>
-
-              <div className="text-center mb-6">
-                <div className="flex items-baseline justify-center gap-1">
-                  <span className="text-3xl font-bold text-slate-900">
-                    ${product.price}
-                  </span>
-                  <span className="text-slate-500">/month</span>
-                </div>
-              </div>
-
-              <div className="space-y-4 mb-8">
-                <div className="flex items-center gap-3 text-sm text-slate-600">
-                  <Check size={16} className="text-emerald-600 shrink-0" />
-                  <span>Core learning features</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm text-slate-600">
-                  <Check size={16} className="text-emerald-600 shrink-0" />
-                  <span>Student progress tracking</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm text-slate-600">
-                  <Check size={16} className="text-emerald-600 shrink-0" />
-                  <span>Basic reporting</span>
-                </div>
-                {product.name === 'LMS2' && (
-                  <>
-                    <div className="flex items-center gap-3 text-sm text-slate-600">
-                      <Check size={16} className="text-emerald-600 shrink-0" />
-                      <span>Advanced analytics</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm text-slate-600">
-                      <Check size={16} className="text-emerald-600 shrink-0" />
-                      <span>Custom integrations</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm text-slate-600">
-                      <Check size={16} className="text-emerald-600 shrink-0" />
-                      <span>Priority support</span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <button
-                onClick={() => createCheckoutSession(product)}
-                disabled={isLoadingThis || isCurrent}
-                className={`w-full py-3 rounded-xl font-semibold transition-all flex items-center justify-center ${
-                  isCurrent 
-                    ? 'bg-emerald-100 text-emerald-700 cursor-default' 
-                    : product.name === 'LMS2'
-                    ? 'bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50'
-                    : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50'
-                } disabled:cursor-not-allowed`}
-              >
-                {isLoadingThis ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                    Processing...
-                  </>
-                ) : isCurrent ? (
-                  'Current Plan'
-                ) : (
-                  'Get Started'
-                )}
-              </button>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      {onClose && (
-        <div className="text-center">
-          <button
-            onClick={onClose}
-            className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-colors"
-          >
-            <X size={18} />
-            Close
-          </button>
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-center">
+          {error}
         </div>
       )}
+
+      <div className="grid md:grid-cols-3 gap-8">
+        {/* Free Plan */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm"
+        >
+          <div className="text-center mb-8">
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Free</h3>
+            <div className="text-3xl font-bold text-slate-900">$0</div>
+            <p className="text-slate-500">Forever</p>
+          </div>
+
+          <ul className="space-y-3 mb-8">
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Up to 10 guests</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Basic room management</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Simple reservations</span>
+            </li>
+          </ul>
+
+          <button 
+            disabled
+            className="w-full py-3 bg-slate-100 text-slate-400 font-medium rounded-xl cursor-not-allowed"
+          >
+            Current Plan
+          </button>
+        </motion.div>
+
+        {/* Basic Plan */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white p-8 rounded-2xl border-2 border-blue-200 shadow-lg relative"
+        >
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+            <span className="bg-blue-500 text-white px-4 py-1 rounded-full text-xs font-bold">
+              POPULAR
+            </span>
+          </div>
+
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <Star className="text-blue-500" size={20} />
+              <h3 className="text-xl font-bold text-slate-900">{basicProduct.name}</h3>
+            </div>
+            <div className="text-3xl font-bold text-slate-900">${basicProduct.price}</div>
+            <p className="text-slate-500">per month</p>
+          </div>
+
+          <ul className="space-y-3 mb-8">
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Up to 30 guests</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Advanced room management</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Billing & invoicing</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Housekeeping management</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Basic reports</span>
+            </li>
+          </ul>
+
+          <button
+            onClick={() => handleUpgrade(basicProduct.priceId)}
+            disabled={loading === basicProduct.priceId || currentPriceId === basicProduct.priceId}
+            className="w-full py-3 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {loading === basicProduct.priceId ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Processing...
+              </>
+            ) : currentPriceId === basicProduct.priceId ? (
+              'Current Plan'
+            ) : (
+              'Upgrade to Basic'
+            )}
+          </button>
+        </motion.div>
+
+        {/* Pro Plan */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-gradient-to-b from-purple-50 to-purple-100 p-8 rounded-2xl border-2 border-purple-200 shadow-lg"
+        >
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <Crown className="text-purple-500" size={20} />
+              <h3 className="text-xl font-bold text-slate-900">{proProduct.name}</h3>
+            </div>
+            <div className="text-3xl font-bold text-slate-900">${proProduct.price}</div>
+            <p className="text-slate-500">per month</p>
+          </div>
+
+          <ul className="space-y-3 mb-8">
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Up to 60 guests</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Everything in Basic</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Advanced analytics</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Product/minibar management</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Priority support</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <Check size={16} className="text-emerald-500" />
+              <span className="text-sm text-slate-600">Custom branding</span>
+            </li>
+          </ul>
+
+          <button
+            onClick={() => handleUpgrade(proProduct.priceId)}
+            disabled={loading === proProduct.priceId || currentPriceId === proProduct.priceId}
+            className="w-full py-3 bg-purple-600 text-white font-medium rounded-xl hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {loading === proProduct.priceId ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Processing...
+              </>
+            ) : currentPriceId === proProduct.priceId ? (
+              'Current Plan'
+            ) : (
+              'Upgrade to Pro'
+            )}
+          </button>
+        </motion.div>
+      </div>
     </div>
   );
 }

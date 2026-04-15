@@ -1,24 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { CircleCheck as CheckCircle, Crown, ArrowRight } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CircleCheck as CheckCircle2, ArrowLeft, Crown } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { getProductByPriceId } from '../../stripe-config';
 
 export default function SuccessPage() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [subscription, setSubscription] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchSubscription = async () => {
       try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Wait a bit for webhook to process
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
         const { data } = await supabase
           .from('stripe_user_subscriptions')
           .select('*')
           .maybeSingle();
-
+        
         setSubscription(data);
       } catch (error) {
         console.error('Error fetching subscription:', error);
@@ -30,84 +34,71 @@ export default function SuccessPage() {
     fetchSubscription();
   }, []);
 
-  const product = subscription?.price_id ? getProductByPriceId(subscription.price_id) : null;
+  const product = subscription ? getProductByPriceId(subscription.price_id) : null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-indigo-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-blue-50 flex items-center justify-center p-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="max-w-2xl w-full text-center"
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full text-center"
       >
-        <div className="bg-white rounded-3xl shadow-2xl p-12 border border-slate-200">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: 'spring' }}
-            className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-8"
-          >
-            <CheckCircle className="w-10 h-10 text-emerald-600" />
-          </motion.div>
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+          className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6"
+        >
+          <CheckCircle2 size={40} className="text-white" />
+        </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <h1 className="text-3xl font-bold text-slate-900 mb-4">
-              Payment Successful!
-            </h1>
-            <p className="text-slate-600 mb-8 text-lg">
-              Thank you for your subscription. Your account has been activated.
-            </p>
-          </motion.div>
+        <h1 className="text-2xl font-bold text-slate-900 mb-4">
+          Payment Successful! 🎉
+        </h1>
 
-          {loading ? (
-            <div className="bg-slate-50 rounded-2xl p-6 mb-8">
-              <div className="animate-pulse">
-                <div className="h-4 bg-slate-200 rounded w-1/3 mx-auto mb-2"></div>
-                <div className="h-6 bg-slate-200 rounded w-1/2 mx-auto"></div>
-              </div>
+        {loading ? (
+          <div className="mb-6">
+            <div className="animate-pulse bg-slate-200 h-4 rounded mb-2"></div>
+            <div className="animate-pulse bg-slate-200 h-4 rounded w-3/4 mx-auto"></div>
+          </div>
+        ) : product ? (
+          <div className="mb-6">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <Crown className="text-purple-500" size={20} />
+              <span className="text-lg font-semibold text-slate-900">{product.name}</span>
             </div>
-          ) : product ? (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-6 mb-8 border border-indigo-100"
-            >
-              <div className="flex items-center justify-center gap-3 mb-2">
-                <Crown className="w-6 h-6 text-purple-600" />
-                <span className="text-sm font-bold text-purple-600 uppercase tracking-wider">
-                  Active Plan
-                </span>
-              </div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-1">{product.name}</h2>
-              <p className="text-slate-600">{product.description}</p>
-              <div className="mt-3 text-lg font-bold text-purple-600">
-                ${product.price}/month
-              </div>
-            </motion.div>
-          ) : null}
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="space-y-4"
-          >
-            <button
-              onClick={() => navigate('/')}
-              className="w-full py-4 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-200"
-            >
-              Continue to Dashboard
-              <ArrowRight size={20} />
-            </button>
-            
-            <p className="text-sm text-slate-500">
-              You can manage your subscription and billing from your account settings.
+            <p className="text-slate-600">
+              Your subscription is now active! You can now access all {product.name.toLowerCase()} features.
             </p>
-          </motion.div>
+          </div>
+        ) : (
+          <p className="text-slate-600 mb-6">
+            Your payment has been processed successfully. Your account will be updated shortly.
+          </p>
+        )}
+
+        <div className="space-y-3">
+          <Link
+            to="/"
+            className="w-full block py-3 bg-emerald-600 text-white font-medium rounded-xl hover:bg-emerald-700 transition-all"
+          >
+            Go to Dashboard
+          </Link>
+          
+          <Link
+            to="/pricing"
+            className="w-full block py-3 bg-slate-100 text-slate-600 font-medium rounded-xl hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
+          >
+            <ArrowLeft size={16} />
+            Back to Pricing
+          </Link>
+        </div>
+
+        <div className="mt-8 p-4 bg-slate-50 rounded-xl">
+          <p className="text-xs text-slate-500">
+            You will receive a confirmation email shortly. If you have any questions, 
+            please contact our support team.
+          </p>
         </div>
       </motion.div>
     </div>

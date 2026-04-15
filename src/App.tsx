@@ -76,8 +76,8 @@ export default function App() {
   function getCurrentPlan(): SubscriptionPlan {
     if (!subscription?.price_id) return 'Free';
     const product = getProductByPriceId(subscription.price_id);
-    if (product?.name === 'LMS2') return 'Pro';
-    if (product?.name === 'LMS') return 'Basic';
+    if (product?.name === 'LUMINA PRO') return 'Pro';
+    if (product?.name === 'LUMINA BASIC') return 'Basic';
     return 'Free';
   }
 
