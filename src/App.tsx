@@ -19,6 +19,7 @@ import InvoiceModal from './components/InvoiceModal';
 import SettingsView from './components/SettingsView';
 import HousekeepingTasksPanel from './components/HousekeepingTasksPanel';
 import BookingPage from './components/BookingPage';
+import LiveBillPanel from './components/billing/LiveBillPanel';
 import PendingBookingsPanel from './components/PendingBookingsPanel';
 import RoomCalendar from './components/RoomCalendar';
 import SuperAdminView from './components/superadmin/SuperAdminView';
@@ -1777,6 +1778,16 @@ function BillingView({
     .filter(t => t.status === 'Pending' && t.amount > 0)
     .reduce((sum, t) => sum + t.amount, 0);
 
+  const roomRevenue = transactions
+    .filter(t => t.type === 'Room' && t.amount > 0)
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalOccupiedNights = reservations
+    .filter(r => r.status === 'Checked Out' || r.status === 'Checked In')
+    .reduce((sum, r) => sum + (r.nights || 0), 0);
+
+  const adr = totalOccupiedNights > 0 ? roomRevenue / totalOccupiedNights : 0;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const res = reservations.find(r => r.id === formData.reservationId);
@@ -1817,10 +1828,10 @@ function BillingView({
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-indigo-600 p-6 rounded-2xl text-white shadow-lg shadow-indigo-200">
-          <p className="text-indigo-100 text-sm font-medium">Total Revenue (MTD)</p>
+        <div className="bg-slate-900 p-6 rounded-2xl text-white shadow-lg shadow-slate-200">
+          <p className="text-slate-300 text-sm font-medium">Total Revenue (MTD)</p>
           <h3 className="text-3xl font-bold mt-2">${totalRevenue.toLocaleString()}</h3>
-          <div className="mt-4 flex items-center gap-2 text-xs font-bold bg-indigo-500/50 w-fit px-2 py-1 rounded-lg">
+          <div className="mt-4 flex items-center gap-2 text-xs font-bold bg-white/10 w-fit px-2 py-1 rounded-lg">
             <CheckCircle2 size={14} />
             Real-time data
           </div>
@@ -1834,9 +1845,9 @@ function BillingView({
         </div>
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <p className="text-slate-500 text-sm font-medium">Average Daily Rate</p>
-          <h3 className="text-3xl font-bold text-slate-900 mt-2">$185.50</h3>
-          <p className="text-emerald-600 text-xs font-bold mt-4 flex items-center gap-1">
-            <CheckCircle2 size={14} /> Optimal pricing
+          <h3 className="text-3xl font-bold text-slate-900 mt-2">${adr.toFixed(2)}</h3>
+          <p className={`text-xs font-bold mt-4 flex items-center gap-1 ${adr > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+            <CheckCircle2 size={14} /> {adr > 0 ? 'From real bookings' : 'No data yet'}
           </p>
         </div>
       </div>
@@ -1869,27 +1880,45 @@ function BillingView({
             </tr>
           </thead>
           <tbody>
-            {transactions.map((t) => (
-              <tr key={t.id} className="data-row">
-                <td className="data-cell text-slate-500 text-xs">{t.date}</td>
-                <td className="data-cell font-medium">{t.description}</td>
-                <td className="data-cell text-slate-600">{t.guestName}</td>
-                <td className="data-cell">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t.type}</span>
-                </td>
-                <td className="data-cell">
-                  <span className={`status-badge ${t.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                    {t.status}
-                  </span>
-                </td>
-                <td className={`data-cell text-right font-mono font-bold ${t.amount < 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
-                  {t.amount < 0 ? `-$${Math.abs(t.amount)}` : `$${t.amount}`}
+            {transactions.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="py-16 text-center text-slate-400 text-sm">
+                  No transactions yet. Transactions appear automatically when reservations are created.
                 </td>
               </tr>
-            ))}
+            ) : (
+              transactions.map((t) => (
+                <tr key={t.id} className="data-row">
+                  <td className="data-cell text-slate-500 text-xs whitespace-nowrap">
+                    {new Date(t.date).toLocaleDateString()}
+                  </td>
+                  <td className="data-cell font-medium">{t.description}</td>
+                  <td className="data-cell text-slate-600">{t.guestName}</td>
+                  <td className="data-cell">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t.type}</span>
+                  </td>
+                  <td className="data-cell">
+                    <span className={`status-badge ${t.amount < 0 || t.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {t.amount < 0 ? 'Paid' : t.status}
+                    </span>
+                  </td>
+                  <td className={`data-cell text-right font-mono font-bold ${t.amount < 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                    {t.amount < 0 ? `-$${Math.abs(t.amount).toFixed(2)}` : `$${t.amount.toFixed(2)}`}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
+
+      <LiveBillPanel
+        reservations={reservations}
+        transactions={transactions}
+        onAddTransaction={onAddTransaction}
+        currentUser={currentUser}
+        logoUrl={logoUrl}
+      />
 
       {selectedResForReceipt && receiptRes && (
         <InvoiceModal
