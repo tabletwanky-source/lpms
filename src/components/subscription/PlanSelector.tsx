@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Check, Crown, Zap, Loader2, X } from 'lucide-react';
+import { Check, Crown, Zap, Loader as Loader2, X } from 'lucide-react';
 import { products, Product } from '../../stripe-config';
 import { supabase } from '../../lib/supabase';
 

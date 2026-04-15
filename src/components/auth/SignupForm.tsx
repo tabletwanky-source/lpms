@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Hotel, Mail, Lock, User, Loader2 } from 'lucide-react';
+import { Hotel, Mail, Lock, User, Loader as Loader2 } from 'lucide-react';
 
 interface SignupFormProps {
   onToggleForm: () => void;

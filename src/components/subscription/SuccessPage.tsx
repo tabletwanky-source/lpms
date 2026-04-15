@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { CheckCircle, Crown, ArrowRight } from 'lucide-react';
+import { CircleCheck as CheckCircle, Crown, ArrowRight } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { getProductByPriceId } from '../../stripe-config';

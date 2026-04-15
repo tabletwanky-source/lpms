@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Lock, Mail, Loader2 } from 'lucide-react';
+import { Lock, Mail, Loader as Loader2 } from 'lucide-react';
 
 interface LoginFormProps {
   onToggleForm: () => void;
