@@ -18,6 +18,10 @@ import ProductsView from './components/ProductsView';
 import InvoiceModal from './components/InvoiceModal';
 import SettingsView from './components/SettingsView';
 import HousekeepingTasksPanel from './components/HousekeepingTasksPanel';
+import BookingPage from './components/BookingPage';
+import PendingBookingsPanel from './components/PendingBookingsPanel';
+import RoomCalendar from './components/RoomCalendar';
+import { I18nProvider, useI18n, LANGUAGE_NAMES, Language } from './lib/i18n';
 import { supabase } from './lib/supabase';
 import { getProductByPriceId } from './stripe-config';
 
@@ -67,6 +71,7 @@ export default function App() {
     email: user.email!,
     hotelName: user.user_metadata?.hotel_name || 'My Hotel',
     managerName: user.user_metadata?.manager_name || user.email?.split('@')[0] || 'Manager',
+    phone: user.user_metadata?.phone || '',
     role: 'Admin' as UserRole,
     plan: getCurrentPlan(),
     password: '',
@@ -141,6 +146,22 @@ export default function App() {
     setReservations(prev => prev.filter(r => {
       if (r.status !== 'Cancelled' || !r.canceled_at) return true;
       return new Date(r.canceled_at) >= tenDaysAgo;
+    }));
+  }, []);
+
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    setReservations(prev => prev.map(r => {
+      if (r.status === 'Confirmed' && r.checkIn <= today) {
+        return { ...r, status: 'Checked In' as const };
+      }
+      if (r.status === 'Checked In' && r.checkOut < today) {
+        setRooms(prev2 => prev2.map(room =>
+          room.number === r.roomNumber ? { ...room, status: 'Dirty' as Room['status'] } : room
+        ));
+        return { ...r, status: 'Checked Out' as const };
+      }
+      return r;
     }));
   }, []);
 
@@ -297,34 +318,47 @@ export default function App() {
   const navItems = [
     { id: 'Dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { id: 'Reservations', icon: Calendar, label: 'Reservations' },
+    { id: 'Calendar', icon: CalendarDays, label: 'Calendar' },
     { id: 'Guests', icon: Users, label: 'Guests' },
     { id: 'Billing', icon: CreditCard, label: 'Billing' },
     { id: 'Housekeeping', icon: Home, label: 'Housekeeping' },
+    { id: 'Bookings', icon: FileText, label: 'Bookings' },
     { id: 'Reports', icon: BarChart3, label: 'Reports' },
-    ...(currentUser?.role === 'Admin' ? [{ id: 'Admin', icon: Shield, label: 'Room Management' }] : []),
+    ...(currentUser?.role === 'Admin' ? [{ id: 'Admin', icon: Shield, label: 'Room Mgmt' }] : []),
   ];
+
+  if (window.location.pathname.startsWith('/booking')) {
+    return (
+      <I18nProvider>
+        <BookingPage />
+      </I18nProvider>
+    );
+  }
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-slate-700"></div>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/auth" element={<AuthPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
+      <I18nProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/auth" element={<AuthPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </I18nProvider>
     );
   }
 
   return (
+    <I18nProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/success" element={<SuccessPage />} />
@@ -369,6 +403,22 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+    </I18nProvider>
+  );
+}
+
+function LanguageSwitcher() {
+  const { language, setLanguage } = useI18n();
+  return (
+    <select
+      value={language}
+      onChange={e => setLanguage(e.target.value as Language)}
+      className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer hover:bg-slate-100 transition-all"
+    >
+      {(Object.entries(LANGUAGE_NAMES) as [Language, string][]).map(([code, name]) => (
+        <option key={code} value={code}>{name}</option>
+      ))}
+    </select>
   );
 }
 
@@ -512,12 +562,13 @@ function MainApp({
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <LanguageSwitcher />
             <button className="p-2 hover:bg-slate-100 rounded-xl relative">
               <Bell size={20} className="text-slate-500" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
             </button>
             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-              <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center text-white text-xs font-bold">
+              <div className="w-7 h-7 bg-slate-800 rounded-lg flex items-center justify-center text-white text-xs font-bold">
                 {currentUser.managerName?.charAt(0) ?? 'U'}
               </div>
               <span className="text-sm font-medium text-slate-700">{currentUser.managerName}</span>
@@ -642,6 +693,8 @@ function ViewRenderer({
         currentUser={currentUser}
       />
     );
+    case 'Calendar': return <RoomCalendar rooms={rooms} reservations={reservations} />;
+    case 'Bookings': return <PendingBookingsPanel />;
     case 'Products': return <ProductsView />;
     case 'Reports': return (
       <ReportsView

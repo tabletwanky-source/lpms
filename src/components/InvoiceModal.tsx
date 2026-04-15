@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Printer, Plus, Trash2, Download } from 'lucide-react';
+import { X, Printer, Plus, Trash2, Download, CircleCheck as CheckCircle2, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import { supabase } from '../lib/supabase';
@@ -18,6 +18,8 @@ export default function InvoiceModal({ reservation, hotelUser, logoUrl, onClose 
   const [selectedProduct, setSelectedProduct] = useState('');
   const [selectedQty, setSelectedQty] = useState(1);
   const [adding, setAdding] = useState(false);
+  const [savingInvoice, setSavingInvoice] = useState(false);
+  const [invoiceSaved, setInvoiceSaved] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -78,20 +80,72 @@ export default function InvoiceModal({ reservation, hotelUser, logoUrl, onClose 
     window.print();
   }
 
-  function handleDownloadPDF() {
+  async function handleSaveInvoice() {
+    setSavingInvoice(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSavingInvoice(false); return; }
+
+    await supabase.from('invoices').insert({
+      hotel_id: user.id,
+      reservation_id: reservation.id,
+      guest_name: reservation.guestName,
+      room_number: reservation.roomNumber,
+      nights: reservation.nights,
+      room_total: reservation.total,
+      products_total: extrasTotal,
+      total: grandTotal,
+      paid: amountPaid,
+      balance: Math.max(0, balance),
+      status: balance <= 0 ? 'paid' : 'issued',
+    });
+
+    setInvoiceSaved(true);
+    setSavingInvoice(false);
+    setTimeout(() => setInvoiceSaved(false), 3000);
+  }
+
+  async function getImageBase64(url: string): Promise<string | null> {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleDownloadPDF() {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
-    let y = 20;
+    let y = 16;
+    let headerX = 14;
 
-    doc.setFontSize(20);
+    if (logoUrl) {
+      const b64 = await getImageBase64(logoUrl);
+      if (b64) {
+        doc.addImage(b64, 'PNG', 14, 10, 24, 24);
+        headerX = 44;
+      }
+    }
+
+    doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
-    doc.text(hotelUser.hotelName, 14, y);
-    y += 7;
-    doc.setFontSize(10);
+    doc.text(hotelUser.hotelName, headerX, y);
+    y += 6;
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100);
-    doc.text(hotelUser.email, 14, y);
+    doc.text(hotelUser.email, headerX, y);
     y += 5;
+    if (hotelUser.phone) {
+      doc.text(hotelUser.phone, headerX, y);
+      y += 5;
+    }
 
     doc.setFontSize(22);
     doc.setFont('helvetica', 'bold');
@@ -227,6 +281,24 @@ export default function InvoiceModal({ reservation, hotelUser, logoUrl, onClose 
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0 no-print">
             <h3 className="font-bold text-slate-900">Invoice</h3>
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleSaveInvoice}
+                disabled={savingInvoice}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                  invoiceSaved
+                    ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                } disabled:opacity-60`}
+              >
+                {savingInvoice ? (
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : invoiceSaved ? (
+                  <CheckCircle2 size={16} />
+                ) : (
+                  <FileText size={16} />
+                )}
+                {invoiceSaved ? 'Saved!' : 'Save Invoice'}
+              </button>
               <button
                 onClick={handleDownloadPDF}
                 className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all"

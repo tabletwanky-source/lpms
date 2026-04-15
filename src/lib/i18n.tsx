@@ -1,0 +1,223 @@
+import React, { createContext, useContext, useState } from 'react';
+
+export type Language = 'en' | 'es' | 'fr';
+
+const translations = {
+  en: {
+    dashboard: 'Dashboard',
+    reservations: 'Reservations',
+    guests: 'Guests',
+    billing: 'Billing',
+    housekeeping: 'Housekeeping',
+    reports: 'Reports',
+    settings: 'Settings',
+    products: 'Products',
+    bookings: 'Bookings',
+    calendar: 'Calendar',
+    checkIn: 'Check In',
+    checkOut: 'Check Out',
+    cancel: 'Cancel',
+    save: 'Save',
+    edit: 'Edit',
+    delete: 'Delete',
+    approve: 'Approve',
+    reject: 'Reject',
+    pending: 'Pending',
+    approved: 'Approved',
+    rejected: 'Rejected',
+    search: 'Search...',
+    total: 'Total',
+    status: 'Status',
+    room: 'Room',
+    guest: 'Guest',
+    date: 'Date',
+    nights: 'Nights',
+    balance: 'Balance',
+    paid: 'Paid',
+    addNew: 'Add New',
+    loading: 'Loading...',
+    noData: 'No data found',
+    welcome: 'Welcome',
+    logout: 'Logout',
+    invoice: 'Invoice',
+    downloadPdf: 'Download PDF',
+    printInvoice: 'Print',
+    saveInvoice: 'Save Invoice',
+    bookingLink: 'Booking Link',
+    copyLink: 'Copy Link',
+    copiedLink: 'Copied!',
+    onlineBooking: 'Online Booking',
+    notifyWhatsApp: 'Notify via WhatsApp',
+    phone: 'Phone',
+    email: 'Email',
+    hotelName: 'Hotel Name',
+    managerName: 'Manager Name',
+    roomType: 'Room Type',
+    checkInDate: 'Check-In Date',
+    checkOutDate: 'Check-Out Date',
+    specialRequests: 'Special Requests',
+    submitBooking: 'Submit Booking Request',
+    bookingSuccess: 'Booking request sent!',
+    language: 'Language',
+    autoCheckedIn: 'Auto checked-in',
+    autoCheckedOut: 'Auto checked-out',
+  },
+  es: {
+    dashboard: 'Panel',
+    reservations: 'Reservaciones',
+    guests: 'Huéspedes',
+    billing: 'Facturación',
+    housekeeping: 'Limpieza',
+    reports: 'Reportes',
+    settings: 'Configuración',
+    products: 'Productos',
+    bookings: 'Reservas',
+    calendar: 'Calendario',
+    checkIn: 'Registrar Entrada',
+    checkOut: 'Registrar Salida',
+    cancel: 'Cancelar',
+    save: 'Guardar',
+    edit: 'Editar',
+    delete: 'Eliminar',
+    approve: 'Aprobar',
+    reject: 'Rechazar',
+    pending: 'Pendiente',
+    approved: 'Aprobado',
+    rejected: 'Rechazado',
+    search: 'Buscar...',
+    total: 'Total',
+    status: 'Estado',
+    room: 'Habitación',
+    guest: 'Huésped',
+    date: 'Fecha',
+    nights: 'Noches',
+    balance: 'Saldo',
+    paid: 'Pagado',
+    addNew: 'Agregar',
+    loading: 'Cargando...',
+    noData: 'Sin datos',
+    welcome: 'Bienvenido',
+    logout: 'Cerrar Sesión',
+    invoice: 'Factura',
+    downloadPdf: 'Descargar PDF',
+    printInvoice: 'Imprimir',
+    saveInvoice: 'Guardar Factura',
+    bookingLink: 'Enlace de Reserva',
+    copyLink: 'Copiar Enlace',
+    copiedLink: '¡Copiado!',
+    onlineBooking: 'Reserva en Línea',
+    notifyWhatsApp: 'Notificar por WhatsApp',
+    phone: 'Teléfono',
+    email: 'Correo',
+    hotelName: 'Nombre del Hotel',
+    managerName: 'Nombre del Gerente',
+    roomType: 'Tipo de Habitación',
+    checkInDate: 'Fecha de Entrada',
+    checkOutDate: 'Fecha de Salida',
+    specialRequests: 'Solicitudes Especiales',
+    submitBooking: 'Enviar Solicitud',
+    bookingSuccess: '¡Solicitud enviada!',
+    language: 'Idioma',
+    autoCheckedIn: 'Check-in automático',
+    autoCheckedOut: 'Check-out automático',
+  },
+  fr: {
+    dashboard: 'Tableau de Bord',
+    reservations: 'Réservations',
+    guests: 'Clients',
+    billing: 'Facturation',
+    housekeeping: 'Ménage',
+    reports: 'Rapports',
+    settings: 'Paramètres',
+    products: 'Produits',
+    bookings: 'Réservations',
+    calendar: 'Calendrier',
+    checkIn: 'Enregistrement',
+    checkOut: 'Départ',
+    cancel: 'Annuler',
+    save: 'Sauvegarder',
+    edit: 'Modifier',
+    delete: 'Supprimer',
+    approve: 'Approuver',
+    reject: 'Rejeter',
+    pending: 'En attente',
+    approved: 'Approuvé',
+    rejected: 'Rejeté',
+    search: 'Rechercher...',
+    total: 'Total',
+    status: 'Statut',
+    room: 'Chambre',
+    guest: 'Client',
+    date: 'Date',
+    nights: 'Nuits',
+    balance: 'Solde',
+    paid: 'Payé',
+    addNew: 'Ajouter',
+    loading: 'Chargement...',
+    noData: 'Aucune donnée',
+    welcome: 'Bienvenue',
+    logout: 'Déconnexion',
+    invoice: 'Facture',
+    downloadPdf: 'Télécharger PDF',
+    printInvoice: 'Imprimer',
+    saveInvoice: 'Sauvegarder Facture',
+    bookingLink: 'Lien de Réservation',
+    copyLink: 'Copier le Lien',
+    copiedLink: 'Copié!',
+    onlineBooking: 'Réservation en Ligne',
+    notifyWhatsApp: 'Notifier via WhatsApp',
+    phone: 'Téléphone',
+    email: 'Email',
+    hotelName: 'Nom de l\'Hôtel',
+    managerName: 'Nom du Gérant',
+    roomType: 'Type de Chambre',
+    checkInDate: 'Date d\'Arrivée',
+    checkOutDate: 'Date de Départ',
+    specialRequests: 'Demandes Spéciales',
+    submitBooking: 'Soumettre la Demande',
+    bookingSuccess: 'Demande envoyée!',
+    language: 'Langue',
+    autoCheckedIn: 'Arrivée automatique',
+    autoCheckedOut: 'Départ automatique',
+  },
+};
+
+type Translations = typeof translations.en;
+
+interface I18nContextType {
+  language: Language;
+  setLanguage: (lang: Language) => void;
+  t: Translations;
+}
+
+const I18nContext = createContext<I18nContextType>({
+  language: 'en',
+  setLanguage: () => {},
+  t: translations.en,
+});
+
+export function I18nProvider({ children }: { children: React.ReactNode }) {
+  const stored = (localStorage.getItem('lumina_lang') as Language) || 'en';
+  const [language, setLanguageState] = useState<Language>(stored);
+
+  function setLanguage(lang: Language) {
+    setLanguageState(lang);
+    localStorage.setItem('lumina_lang', lang);
+  }
+
+  return (
+    <I18nContext.Provider value={{ language, setLanguage, t: translations[language] }}>
+      {children}
+    </I18nContext.Provider>
+  );
+}
+
+export function useI18n() {
+  return useContext(I18nContext);
+}
+
+export const LANGUAGE_NAMES: Record<Language, string> = {
+  en: 'English',
+  es: 'Español',
+  fr: 'Français',
+};

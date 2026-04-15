@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type View = 'Dashboard' | 'Reservations' | 'Guests' | 'Billing' | 'Housekeeping' | 'Reports' | 'Admin' | 'Products' | 'Settings';
+export type View = 'Dashboard' | 'Reservations' | 'Guests' | 'Billing' | 'Housekeeping' | 'Reports' | 'Admin' | 'Products' | 'Settings' | 'Calendar' | 'Bookings';
 
 export interface Product {
   id: string;
@@ -33,10 +33,42 @@ export interface User {
   hotelName: string;
   managerName: string;
   email: string;
+  phone?: string;
   password?: string;
   role: UserRole;
   plan: SubscriptionPlan;
   createdAt: string;
+}
+
+export interface PublicBooking {
+  id: string;
+  hotel_id: string;
+  guest_name: string;
+  email: string;
+  phone: string;
+  room_type: 'Single' | 'Double' | 'Suite' | 'Deluxe';
+  check_in: string;
+  check_out: string;
+  num_guests: number;
+  special_requests: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+}
+
+export interface Invoice {
+  id: string;
+  hotel_id: string;
+  reservation_id: string | null;
+  guest_name: string;
+  room_number: string;
+  nights: number;
+  room_total: number;
+  products_total: number;
+  total: number;
+  paid: number;
+  balance: number;
+  status: 'issued' | 'paid' | 'cancelled';
+  created_at: string;
 }
 
 export interface Room {

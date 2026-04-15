@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Upload, Check, CircleAlert as AlertCircle, Hotel, User, Mail, Camera, X, Save } from 'lucide-react';
+import { Upload, Check, CircleAlert as AlertCircle, Hotel, User, Mail, Camera, X, Save, Phone, Link, Copy } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { User as AppUser } from '../types';
@@ -21,7 +21,9 @@ export default function SettingsView({ user, logoUrl, onLogoChange }: SettingsVi
     hotelName: user.hotelName,
     managerName: user.managerName,
     email: user.email,
+    phone: user.phone || '',
   });
+  const [linkCopied, setLinkCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -85,6 +87,7 @@ export default function SettingsView({ user, logoUrl, onLogoChange }: SettingsVi
       data: {
         hotel_name: profileForm.hotelName,
         manager_name: profileForm.managerName,
+        phone: profileForm.phone,
       },
     };
 
@@ -156,6 +159,18 @@ export default function SettingsView({ user, logoUrl, onLogoChange }: SettingsVi
             {profileForm.email !== user.email && (
               <p className="text-xs text-amber-600">You will need to confirm the new email address.</p>
             )}
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+              <Phone size={12} /> Phone Number
+            </label>
+            <input
+              type="tel"
+              value={profileForm.phone}
+              onChange={e => setProfileForm(p => ({ ...p, phone: e.target.value }))}
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-slate-400 rounded-xl text-sm outline-none transition-all"
+              placeholder="e.g. +1 555 000 0000"
+            />
           </div>
 
           {saveError && (
@@ -271,6 +286,37 @@ export default function SettingsView({ user, logoUrl, onLogoChange }: SettingsVi
               </p>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-slate-100">
+          <h2 className="font-bold text-slate-900">Online Booking Link</h2>
+          <p className="text-sm text-slate-500 mt-0.5">Share this link with guests to let them submit booking requests.</p>
+        </div>
+        <div className="p-6 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-600 font-mono truncate">
+              {`${window.location.origin}/booking?hotel_id=${user.id}`}
+            </div>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/booking?hotel_id=${user.id}`);
+                setLinkCopied(true);
+                setTimeout(() => setLinkCopied(false), 2000);
+              }}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shrink-0 ${
+                linkCopied ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-slate-900 text-white hover:bg-slate-800'
+              }`}
+            >
+              {linkCopied ? <Check size={16} /> : <Copy size={16} />}
+              {linkCopied ? 'Copied!' : 'Copy Link'}
+            </button>
+          </div>
+          <p className="text-xs text-slate-400 flex items-center gap-1.5">
+            <Link size={11} />
+            Guests can submit requests from this page. You'll see them under the Bookings section.
+          </p>
         </div>
       </div>
 

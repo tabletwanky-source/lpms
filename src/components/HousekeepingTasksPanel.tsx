@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, CircleCheck as CheckCircle2, Clock, Wrench, RefreshCw, Trash2 } from 'lucide-react';
+import { Plus, X, CircleCheck as CheckCircle2, Clock, Wrench, RefreshCw, Trash2, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { HousekeepingTask, Room, User } from '../types';
@@ -39,6 +39,8 @@ export default function HousekeepingTasksPanel({ rooms, currentUser }: Housekeep
     notes: '',
   });
   const [saving, setSaving] = useState(false);
+  const [whatsAppTask, setWhatsAppTask] = useState<HousekeepingTask | null>(null);
+  const [notifyPhone, setNotifyPhone] = useState('');
 
   const isAdmin = currentUser.role === 'Admin';
 
@@ -85,7 +87,21 @@ export default function HousekeepingTasksPanel({ rooms, currentUser }: Housekeep
 
     if (!error) {
       setTasks(prev => prev.map(t => t.id === id ? { ...t, status, completed_at } : t));
+      if (status === 'completed') {
+        const task = tasks.find(t => t.id === id);
+        if (task) { setWhatsAppTask(task); setNotifyPhone(''); }
+      }
     }
+  }
+
+  function sendWhatsApp() {
+    if (!notifyPhone || !whatsAppTask) return;
+    const phone = notifyPhone.replace(/\D/g, '');
+    const msg = encodeURIComponent(
+      `Dear Guest, Room ${whatsAppTask.room_number} is ready and has been freshly ${whatsAppTask.task === 'cleaning' ? 'cleaned' : whatsAppTask.task === 'turndown' ? 'prepared for turndown' : 'serviced'}. Welcome! 🏨`
+    );
+    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+    setWhatsAppTask(null);
   }
 
   async function deleteTask(id: string) {
@@ -279,6 +295,66 @@ export default function HousekeepingTasksPanel({ rooms, currentUser }: Housekeep
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {whatsAppTask && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setWhatsAppTask(null)}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white rounded-3xl shadow-2xl z-[51] overflow-hidden"
+            >
+              <div className="p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                    <MessageCircle size={20} className="text-emerald-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900">Notify Guest via WhatsApp</h3>
+                    <p className="text-xs text-slate-500">Room {whatsAppTask.room_number} — {whatsAppTask.task} complete</p>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Guest Phone Number</label>
+                  <input
+                    type="tel"
+                    placeholder="+1 555 000 0000"
+                    value={notifyPhone}
+                    onChange={e => setNotifyPhone(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-slate-400 rounded-xl text-sm outline-none"
+                    autoFocus
+                  />
+                  <p className="text-xs text-slate-400">Include country code (e.g. +1 for USA, +44 for UK)</p>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setWhatsAppTask(null)}
+                    className="flex-1 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-all text-sm"
+                  >
+                    Skip
+                  </button>
+                  <button
+                    onClick={sendWhatsApp}
+                    disabled={!notifyPhone}
+                    className="flex-1 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-all text-sm flex items-center justify-center gap-2"
+                  >
+                    <MessageCircle size={15} />
+                    Send via WhatsApp
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </>
         )}
