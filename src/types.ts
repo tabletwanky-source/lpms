@@ -3,7 +3,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type View = 'Dashboard' | 'Reservations' | 'Guests' | 'Billing' | 'Housekeeping' | 'Reports' | 'Admin';
+export type View = 'Dashboard' | 'Reservations' | 'Guests' | 'Billing' | 'Housekeeping' | 'Reports' | 'Admin' | 'Products' | 'Settings';
+
+export interface Product {
+  id: string;
+  hotel_id: string;
+  name: string;
+  price: number;
+  category: string;
+  created_at: string;
+}
+
+export interface ReservationProduct {
+  id: string;
+  reservation_id: string;
+  hotel_id: string;
+  product_id: string | null;
+  product_name: string;
+  unit_price: number;
+  quantity: number;
+  created_at: string;
+}
 
 export type UserRole = 'Admin' | 'Reception';
 export type SubscriptionPlan = 'Free' | 'Basic' | 'Pro';

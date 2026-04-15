@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { LayoutDashboard, Calendar, Users, CreditCard, Hop as Home, LogOut, Bell, Search, Settings, Plus, MoveVertical as MoreVertical, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Wrench, Mail, Phone, CalendarDays, DollarSign, X, ListFilter as Filter, Download, UserPlus, ChartBar as BarChart3, TrendingUp, ChartPie as PieChart, Shield, Printer, Hotel, User as UserIcon, Lock, Menu } from 'lucide-react';
+import { LayoutDashboard, Calendar, Users, CreditCard, Hop as Home, LogOut, Bell, Search, Settings, Plus, MoveVertical as MoreVertical, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Wrench, Mail, Phone, CalendarDays, DollarSign, X, ListFilter as Filter, Download, UserPlus, ChartBar as BarChart3, TrendingUp, ChartPie as PieChart, Shield, Printer, Hotel, User as UserIcon, Lock, Menu, Package, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { View, Room, Reservation, Guest, Transaction, TransactionType, Staff, User, UserRole, SubscriptionPlan } from './types';
@@ -14,6 +14,9 @@ import AdminView from './components/AdminView';
 import PlanSelector from './components/subscription/PlanSelector';
 import SuccessPage from './components/subscription/SuccessPage';
 import LandingPage from './components/LandingPage';
+import ProductsView from './components/ProductsView';
+import InvoiceModal from './components/InvoiceModal';
+import SettingsView from './components/SettingsView';
 import { supabase } from './lib/supabase';
 import { getProductByPriceId } from './stripe-config';
 
@@ -79,6 +82,7 @@ export default function App() {
 
   const [currentView, setCurrentView] = useState<View>('Dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   
   // Rooms State with LocalStorage
   const [rooms, setRooms] = useState<Room[]>(() => {
@@ -300,7 +304,7 @@ export default function App() {
           </div>
         } />
         <Route path="/" element={
-          <MainApp 
+          <MainApp
             currentUser={currentUser!}
             currentView={currentView}
             setCurrentView={setCurrentView}
@@ -310,7 +314,8 @@ export default function App() {
             showPricingModal={showPricingModal}
             setShowPricingModal={setShowPricingModal}
             subscription={subscription}
-            // ... all other props
+            logoUrl={logoUrl}
+            onLogoChange={setLogoUrl}
             guests={guests}
             onAddGuest={addGuest}
             rooms={rooms}
@@ -334,16 +339,18 @@ export default function App() {
   );
 }
 
-function MainApp({ 
-  currentUser, 
-  currentView, 
-  setCurrentView, 
-  isSidebarOpen, 
+function MainApp({
+  currentUser,
+  currentView,
+  setCurrentView,
+  isSidebarOpen,
   setIsSidebarOpen,
   handleLogout,
   showPricingModal,
   setShowPricingModal,
   subscription,
+  logoUrl,
+  onLogoChange,
   guests,
   onAddGuest,
   rooms,
@@ -369,6 +376,8 @@ function MainApp({
   showPricingModal: boolean;
   setShowPricingModal: (show: boolean) => void;
   subscription: any;
+  logoUrl: string | null;
+  onLogoChange: (url: string) => void;
   guests: Guest[];
   onAddGuest: (g: Omit<Guest, 'id' | 'lastStay' | 'totalSpent'>) => void;
   rooms: Room[];
@@ -391,8 +400,10 @@ function MainApp({
     { id: 'Guests', icon: Users, label: 'Guests' },
     { id: 'Billing', icon: CreditCard, label: 'Billing' },
     { id: 'Housekeeping', icon: Home, label: 'Housekeeping' },
+    { id: 'Products', icon: Package, label: 'Products' },
     { id: 'Reports', icon: BarChart3, label: 'Reports' },
     ...(currentUser?.role === 'Admin' ? [{ id: 'Admin', icon: Shield, label: 'Room Management' }] : []),
+    { id: 'Settings', icon: Settings, label: 'Settings' },
   ];
 
   return (
@@ -494,6 +505,8 @@ function MainApp({
             onUpdateRoom={onUpdateRoom}
             onDeleteRoom={onDeleteRoom}
             currentUser={currentUser}
+            logoUrl={logoUrl}
+            onLogoChange={onLogoChange}
           />
         </main>
       </div>
@@ -503,8 +516,8 @@ function MainApp({
 }
 
 function ViewRenderer({
-  view, 
-  guests, 
+  view,
+  guests,
   onAddGuest,
   rooms,
   reservations,
@@ -519,10 +532,12 @@ function ViewRenderer({
   onAddRoom,
   onUpdateRoom,
   onDeleteRoom,
-  currentUser
-}: { 
-  view: View; 
-  guests: Guest[]; 
+  currentUser,
+  logoUrl,
+  onLogoChange
+}: {
+  view: View;
+  guests: Guest[];
   onAddGuest: (g: Omit<Guest, 'id' | 'lastStay' | 'totalSpent'>) => void;
   rooms: Room[];
   reservations: Reservation[];
@@ -538,13 +553,15 @@ function ViewRenderer({
   onUpdateRoom: (r: Room) => void;
   onDeleteRoom: (id: string) => void;
   currentUser: User;
+  logoUrl: string | null;
+  onLogoChange: (url: string) => void;
 }) {
   switch (view) {
     case 'Dashboard': return <DashboardView rooms={rooms} reservations={reservations} user={currentUser} />;
     case 'Reservations': return (
-      <ReservationsView 
-        reservations={reservations} 
-        rooms={rooms} 
+      <ReservationsView
+        reservations={reservations}
+        rooms={rooms}
         onAddReservation={onAddReservation}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
@@ -552,34 +569,44 @@ function ViewRenderer({
     );
     case 'Guests': return <GuestsView guests={guests} onAddGuest={onAddGuest} />;
     case 'Billing': return (
-      <BillingView 
-        transactions={transactions} 
+      <BillingView
+        transactions={transactions}
         reservations={reservations}
         onAddTransaction={onAddTransaction}
+        currentUser={currentUser}
+        logoUrl={logoUrl}
       />
     );
     case 'Housekeeping': return (
-      <HousekeepingView 
-        rooms={rooms} 
-        staff={staff} 
+      <HousekeepingView
+        rooms={rooms}
+        staff={staff}
         onUpdateStatus={onUpdateRoomStatus}
         onAssignStaff={onAssignStaff}
       />
     );
+    case 'Products': return <ProductsView />;
     case 'Reports': return (
-      <ReportsView 
-        rooms={rooms} 
-        reservations={reservations} 
-        guests={guests} 
-        transactions={transactions} 
+      <ReportsView
+        rooms={rooms}
+        reservations={reservations}
+        guests={guests}
+        transactions={transactions}
       />
     );
     case 'Admin': return (
-      <AdminView 
-        rooms={rooms} 
-        onAddRoom={onAddRoom} 
-        onUpdateRoom={onUpdateRoom} 
-        onDeleteRoom={onDeleteRoom} 
+      <AdminView
+        rooms={rooms}
+        onAddRoom={onAddRoom}
+        onUpdateRoom={onUpdateRoom}
+        onDeleteRoom={onDeleteRoom}
+      />
+    );
+    case 'Settings': return (
+      <SettingsView
+        user={currentUser}
+        logoUrl={logoUrl}
+        onLogoChange={onLogoChange}
       />
     );
     default: return <DashboardView rooms={rooms} reservations={reservations} user={currentUser} />;
@@ -764,6 +791,18 @@ function ReservationsView({
     e.preventDefault();
     if (!selectedRoom) {
       alert('Please select a room');
+      return;
+    }
+
+    const hasConflict = reservations.some(r =>
+      r.roomId === selectedRoom.id &&
+      r.status !== 'Checked Out' &&
+      r.status !== 'Cancelled' &&
+      formData.checkIn < r.checkOut &&
+      formData.checkOut > r.checkIn
+    );
+    if (hasConflict) {
+      alert('This room is already booked for the selected dates. Please choose different dates or another room.');
       return;
     }
 
@@ -1430,14 +1469,18 @@ function GuestsView({
   );
 }
 
-function BillingView({ 
-  transactions, 
+function BillingView({
+  transactions,
   reservations,
-  onAddTransaction
-}: { 
-  transactions: Transaction[]; 
+  onAddTransaction,
+  currentUser,
+  logoUrl
+}: {
+  transactions: Transaction[];
   reservations: Reservation[];
   onAddTransaction: (t: Omit<Transaction, 'id' | 'date' | 'status'>) => void;
+  currentUser: User;
+  logoUrl: string | null;
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedResForReceipt, setSelectedResForReceipt] = useState<string | null>(null);
@@ -1481,8 +1524,6 @@ function BillingView({
   };
 
   const receiptRes = reservations.find(r => r.id === selectedResForReceipt);
-  const receiptTransactions = transactions.filter(t => t.reservationId === selectedResForReceipt);
-  const receiptTotal = receiptTransactions.reduce((sum, t) => sum + t.amount, 0);
 
   return (
     <div className="space-y-8">
@@ -1574,86 +1615,14 @@ function BillingView({
         </table>
       </div>
 
-      <AnimatePresence>
-        {selectedResForReceipt && receiptRes && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedResForReceipt(null)}
-              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white rounded-3xl shadow-2xl z-[51] overflow-hidden"
-            >
-              <div id="receipt-content" className="p-8 space-y-6">
-                <div className="flex justify-between items-start border-b border-slate-100 pb-6">
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-900">Lumina Hotel Receipt</h2>
-                    <p className="text-sm text-slate-500">123 Luxury Way, Paradise City</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Receipt #</p>
-                    <p className="font-mono font-bold text-slate-900">{receiptRes.id.slice(-8).toUpperCase()}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-8">
-                  <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Guest Info</p>
-                    <p className="font-bold text-slate-900">{receiptRes.guestName}</p>
-                    <p className="text-sm text-slate-500">Room: {receiptRes.roomNumber}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Stay Dates</p>
-                    <p className="text-sm text-slate-900 font-medium">{receiptRes.checkIn} to {receiptRes.checkOut}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Charges</p>
-                  {receiptTransactions.map(t => (
-                    <div key={t.id} className="flex justify-between text-sm py-1">
-                      <span className="text-slate-600">{t.description}</span>
-                      <span className={`font-mono font-bold ${t.amount < 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
-                        {t.amount < 0 ? `-$${Math.abs(t.amount)}` : `$${t.amount}`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="border-t border-slate-900 pt-4 flex justify-between items-center">
-                  <span className="text-lg font-bold text-slate-900">Total Balance</span>
-                  <span className="text-2xl font-bold text-indigo-600">${receiptTotal}</span>
-                </div>
-
-                <div className="pt-8 text-center text-[10px] text-slate-400 uppercase tracking-widest">
-                  Thank you for staying with us!
-                </div>
-              </div>
-              <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
-                <button 
-                  onClick={() => setSelectedResForReceipt(null)}
-                  className="flex-1 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-100 transition-all"
-                >
-                  Close
-                </button>
-                <button 
-                  onClick={() => window.print()}
-                  className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2"
-                >
-                  <Printer size={20} />
-                  Print Receipt
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {selectedResForReceipt && receiptRes && (
+        <InvoiceModal
+          reservation={receiptRes}
+          hotelUser={currentUser}
+          logoUrl={logoUrl}
+          onClose={() => setSelectedResForReceipt(null)}
+        />
+      )}
 
       <AnimatePresence>
         {isModalOpen && (
