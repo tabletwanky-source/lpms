@@ -4,39 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  LayoutDashboard, 
-  Calendar, 
-  Users, 
-  CreditCard, 
-  Home, 
-  LogOut, 
-  Bell, 
-  Search, 
-  Settings,
-  Plus,
-  MoreVertical,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  Wrench,
-  Mail,
-  Phone,
-  CalendarDays,
-  DollarSign,
-  X,
-  Filter,
-  Download,
-  UserPlus,
-  BarChart3,
-  TrendingUp,
-  PieChart,
-  Shield,
-  Printer,
-  Hotel,
-  User as UserIcon,
-  Lock
-} from 'lucide-react';
+import { LayoutDashboard, Calendar, Users, CreditCard, Hop as Home, LogOut, Bell, Search, Settings, Plus, MoveVertical as MoreVertical, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Wrench, Mail, Phone, CalendarDays, DollarSign, X, ListFilter as Filter, Download, UserPlus, ChartBar as BarChart3, TrendingUp, ChartPie as PieChart, Shield, Printer, Hotel, User as UserIcon, Lock, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { View, Room, Reservation, Guest, Transaction, TransactionType, Staff, User, UserRole, SubscriptionPlan } from './types';
@@ -45,6 +13,7 @@ import AuthPage from './components/auth/AuthPage';
 import AdminView from './components/AdminView';
 import PlanSelector from './components/subscription/PlanSelector';
 import SuccessPage from './components/subscription/SuccessPage';
+import LandingPage from './components/LandingPage';
 import { supabase } from './lib/supabase';
 import { getProductByPriceId } from './stripe-config';
 
@@ -313,8 +282,9 @@ export default function App() {
     return (
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<LandingPage />} />
           <Route path="/auth" element={<AuthPage />} />
-          <Route path="*" element={<Navigate to="/auth" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     );
@@ -441,8 +411,98 @@ function MainApp({
 
         <nav className="flex-1 px-3 mt-4 space-y-1">
           {navItems.map((item) => (
+            <motion.button
+              key={item.id}
+              onClick={() => setCurrentView(item.id as View)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition-all ${
+                currentView === item.id
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <item.icon size={20} className="shrink-0" />
+              {isSidebarOpen && <span>{item.label}</span>}
+            </motion.button>
+          ))}
+        </nav>
 
-function ViewRenderer({ 
+        <div className="p-4 border-t border-slate-800">
+          {isSidebarOpen && (
+            <div className="mb-3 bg-slate-800/60 rounded-xl p-3">
+              <div className="text-xs font-bold text-white truncate">{currentUser.hotelName}</div>
+              <div className="text-xs text-slate-500 truncate">{currentUser.email}</div>
+            </div>
+          )}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition-all text-sm font-medium"
+          >
+            <LogOut size={20} className="shrink-0" />
+            {isSidebarOpen && <span>Sign Out</span>}
+          </button>
+        </div>
+      </motion.aside>
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
+            >
+              <Menu size={20} className="text-slate-500" />
+            </button>
+            <div className="relative">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search..."
+                className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button className="p-2 hover:bg-slate-100 rounded-xl relative">
+              <Bell size={20} className="text-slate-500" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
+            </button>
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center text-white text-xs font-bold">
+                {currentUser.managerName?.charAt(0) ?? 'U'}
+              </div>
+              <span className="text-sm font-medium text-slate-700">{currentUser.managerName}</span>
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto p-6 bg-slate-50">
+          <ViewRenderer
+            view={currentView}
+            guests={guests}
+            onAddGuest={onAddGuest}
+            rooms={rooms}
+            reservations={reservations}
+            onAddReservation={onAddReservation}
+            onCheckIn={onCheckIn}
+            onCheckOut={onCheckOut}
+            transactions={transactions}
+            onAddTransaction={onAddTransaction}
+            staff={staff}
+            onUpdateRoomStatus={onUpdateRoomStatus}
+            onAssignStaff={onAssignStaff}
+            onAddRoom={onAddRoom}
+            onUpdateRoom={onUpdateRoom}
+            onDeleteRoom={onDeleteRoom}
+            currentUser={currentUser}
+          />
+        </main>
+      </div>
+    </div>
+    </>
+  );
+}
+
+function ViewRenderer({
   view, 
   guests, 
   onAddGuest,
