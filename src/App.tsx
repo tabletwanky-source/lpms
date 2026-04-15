@@ -21,6 +21,7 @@ import HousekeepingTasksPanel from './components/HousekeepingTasksPanel';
 import BookingPage from './components/BookingPage';
 import PendingBookingsPanel from './components/PendingBookingsPanel';
 import RoomCalendar from './components/RoomCalendar';
+import SuperAdminView from './components/superadmin/SuperAdminView';
 import { I18nProvider, useI18n, LANGUAGE_NAMES, Language } from './lib/i18n';
 import { supabase } from './lib/supabase';
 import { getProductByPriceId } from './stripe-config';
@@ -164,6 +165,10 @@ export default function App() {
       return r;
     }));
   }, []);
+
+  const SUPER_ADMIN_EMAIL = 'wankyacademy@gmail.com';
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+  const [showSuperAdmin, setShowSuperAdmin] = useState(false);
 
   const handleLogout = () => {
     supabase.auth.signOut();
@@ -368,6 +373,9 @@ export default function App() {
           </div>
         } />
         <Route path="/" element={
+          showSuperAdmin && isSuperAdmin ? (
+            <SuperAdminView onExit={() => setShowSuperAdmin(false)} />
+          ) : (
           <MainApp
             currentUser={currentUser!}
             currentView={currentView}
@@ -398,7 +406,10 @@ export default function App() {
             onUpdateGuest={updateGuest}
             onDeleteGuest={deleteGuest}
             onCancelReservation={cancelReservation}
+            isSuperAdmin={isSuperAdmin}
+            onOpenSuperAdmin={() => setShowSuperAdmin(true)}
           />
+          )
         } />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -451,7 +462,9 @@ function MainApp({
   onAssignStaff,
   onAddRoom,
   onUpdateRoom,
-  onDeleteRoom
+  onDeleteRoom,
+  isSuperAdmin,
+  onOpenSuperAdmin,
 }: {
   currentUser: User;
   currentView: View;
@@ -482,16 +495,20 @@ function MainApp({
   onAddRoom: (r: Omit<Room, 'id' | 'status'>) => void;
   onUpdateRoom: (r: Room) => void;
   onDeleteRoom: (id: string) => void;
+  isSuperAdmin?: boolean;
+  onOpenSuperAdmin?: () => void;
 }) {
   const navItems = [
     { id: 'Dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { id: 'Reservations', icon: Calendar, label: 'Reservations' },
+    { id: 'Calendar', icon: CalendarDays, label: 'Calendar' },
     { id: 'Guests', icon: Users, label: 'Guests' },
     { id: 'Billing', icon: CreditCard, label: 'Billing' },
     { id: 'Housekeeping', icon: Home, label: 'Housekeeping' },
+    { id: 'Bookings', icon: FileText, label: 'Bookings' },
     { id: 'Products', icon: Package, label: 'Products' },
     { id: 'Reports', icon: BarChart3, label: 'Reports' },
-    ...(currentUser?.role === 'Admin' ? [{ id: 'Admin', icon: Shield, label: 'Room Management' }] : []),
+    ...(currentUser?.role === 'Admin' ? [{ id: 'Admin', icon: Shield, label: 'Room Mgmt' }] : []),
     { id: 'Settings', icon: Settings, label: 'Settings' },
   ];
 
@@ -532,6 +549,15 @@ function MainApp({
               <div className="text-xs font-bold text-white truncate">{currentUser.hotelName}</div>
               <div className="text-xs text-slate-500 truncate">{currentUser.email}</div>
             </div>
+          )}
+          {isSuperAdmin && (
+            <button
+              onClick={onOpenSuperAdmin}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-all text-sm font-bold mb-1"
+            >
+              <Shield size={18} className="shrink-0" />
+              {isSidebarOpen && <span>Super Admin</span>}
+            </button>
           )}
           <button
             onClick={handleLogout}
