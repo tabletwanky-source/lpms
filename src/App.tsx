@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { LayoutDashboard, Calendar, Users, CreditCard, Hop as Home, LogOut, Bell, Search, Settings, Plus, MoveVertical as MoreVertical, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Wrench, Mail, Phone, CalendarDays, DollarSign, X, ListFilter as Filter, Download, UserPlus, ChartBar as BarChart3, TrendingUp, ChartPie as PieChart, Shield, Printer, Hotel, User as UserIcon, Lock, Menu, Package, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { View, Room, Reservation, Guest, Transaction, TransactionType, Staff, User, UserRole, SubscriptionPlan } from './types';
+import { View, Room, Reservation, Guest, Transaction, TransactionType, Staff, User, UserRole, SubscriptionPlan, HousekeepingTask } from './types';
 import { MOCK_ROOMS, MOCK_RESERVATIONS, MOCK_GUESTS, MOCK_TRANSACTIONS, MOCK_STAFF } from './mockData';
 import AuthPage from './components/auth/AuthPage';
 import AdminView from './components/AdminView';
@@ -17,6 +17,7 @@ import LandingPage from './components/LandingPage';
 import ProductsView from './components/ProductsView';
 import InvoiceModal from './components/InvoiceModal';
 import SettingsView from './components/SettingsView';
+import HousekeepingTasksPanel from './components/HousekeepingTasksPanel';
 import { supabase } from './lib/supabase';
 import { getProductByPriceId } from './stripe-config';
 
@@ -134,6 +135,15 @@ export default function App() {
     localStorage.setItem('lumina_staff', JSON.stringify(staff));
   }, [staff]);
 
+  useEffect(() => {
+    const tenDaysAgo = new Date();
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+    setReservations(prev => prev.filter(r => {
+      if (r.status !== 'Cancelled' || !r.canceled_at) return true;
+      return new Date(r.canceled_at) >= tenDaysAgo;
+    }));
+  }, []);
+
   const handleLogout = () => {
     supabase.auth.signOut();
   };
@@ -158,6 +168,26 @@ export default function App() {
       totalSpent: 0
     };
     setGuests(prev => [guest, ...prev]);
+  };
+
+  const updateGuest = (updatedGuest: Guest) => {
+    setGuests(prev => prev.map(g => g.id === updatedGuest.id ? updatedGuest : g));
+  };
+
+  const deleteGuest = (id: string) => {
+    setGuests(prev => prev.filter(g => g.id !== id));
+  };
+
+  const cancelReservation = (id: string) => {
+    setReservations(prev => prev.map(r =>
+      r.id === id ? { ...r, status: 'Cancelled' as const, canceled_at: new Date().toISOString() } : r
+    ));
+    const res = reservations.find(r => r.id === id);
+    if (res) {
+      setRooms(prev => prev.map(room =>
+        room.number === res.roomNumber && room.status === 'Occupied' ? { ...room, status: 'Available' } : room
+      ));
+    }
   };
 
   const addRoom = (newRoom: Omit<Room, 'id' | 'status'>) => {
@@ -331,6 +361,9 @@ export default function App() {
             onAddRoom={addRoom}
             onUpdateRoom={updateRoom}
             onDeleteRoom={deleteRoom}
+            onUpdateGuest={updateGuest}
+            onDeleteGuest={deleteGuest}
+            onCancelReservation={cancelReservation}
           />
         } />
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -353,11 +386,14 @@ function MainApp({
   onLogoChange,
   guests,
   onAddGuest,
+  onUpdateGuest,
+  onDeleteGuest,
   rooms,
   reservations,
   onAddReservation,
   onCheckIn,
   onCheckOut,
+  onCancelReservation,
   transactions,
   onAddTransaction,
   staff,
@@ -380,11 +416,14 @@ function MainApp({
   onLogoChange: (url: string) => void;
   guests: Guest[];
   onAddGuest: (g: Omit<Guest, 'id' | 'lastStay' | 'totalSpent'>) => void;
+  onUpdateGuest: (g: Guest) => void;
+  onDeleteGuest: (id: string) => void;
   rooms: Room[];
   reservations: Reservation[];
   onAddReservation: (r: Omit<Reservation, 'id' | 'status'>) => void;
   onCheckIn: (id: string) => void;
   onCheckOut: (id: string) => void;
+  onCancelReservation: (id: string) => void;
   transactions: Transaction[];
   onAddTransaction: (t: Omit<Transaction, 'id' | 'date' | 'status'>) => void;
   staff: Staff[];
@@ -491,11 +530,14 @@ function MainApp({
             view={currentView}
             guests={guests}
             onAddGuest={onAddGuest}
+            onUpdateGuest={onUpdateGuest}
+            onDeleteGuest={onDeleteGuest}
             rooms={rooms}
             reservations={reservations}
             onAddReservation={onAddReservation}
             onCheckIn={onCheckIn}
             onCheckOut={onCheckOut}
+            onCancelReservation={onCancelReservation}
             transactions={transactions}
             onAddTransaction={onAddTransaction}
             staff={staff}
@@ -519,11 +561,14 @@ function ViewRenderer({
   view,
   guests,
   onAddGuest,
+  onUpdateGuest,
+  onDeleteGuest,
   rooms,
   reservations,
   onAddReservation,
   onCheckIn,
   onCheckOut,
+  onCancelReservation,
   transactions,
   onAddTransaction,
   staff,
@@ -539,11 +584,14 @@ function ViewRenderer({
   view: View;
   guests: Guest[];
   onAddGuest: (g: Omit<Guest, 'id' | 'lastStay' | 'totalSpent'>) => void;
+  onUpdateGuest: (g: Guest) => void;
+  onDeleteGuest: (id: string) => void;
   rooms: Room[];
   reservations: Reservation[];
   onAddReservation: (r: Omit<Reservation, 'id' | 'status'>) => void;
   onCheckIn: (id: string) => void;
   onCheckOut: (id: string) => void;
+  onCancelReservation: (id: string) => void;
   transactions: Transaction[];
   onAddTransaction: (t: Omit<Transaction, 'id' | 'date' | 'status'>) => void;
   staff: Staff[];
@@ -565,9 +613,17 @@ function ViewRenderer({
         onAddReservation={onAddReservation}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
+        onCancelReservation={onCancelReservation}
       />
     );
-    case 'Guests': return <GuestsView guests={guests} onAddGuest={onAddGuest} />;
+    case 'Guests': return (
+      <GuestsView
+        guests={guests}
+        onAddGuest={onAddGuest}
+        onUpdateGuest={onUpdateGuest}
+        onDeleteGuest={onDeleteGuest}
+      />
+    );
     case 'Billing': return (
       <BillingView
         transactions={transactions}
@@ -583,6 +639,7 @@ function ViewRenderer({
         staff={staff}
         onUpdateStatus={onUpdateRoomStatus}
         onAssignStaff={onAssignStaff}
+        currentUser={currentUser}
       />
     );
     case 'Products': return <ProductsView />;
@@ -740,18 +797,20 @@ function DashboardView({ rooms, reservations, user }: { rooms: Room[]; reservati
   );
 }
 
-function ReservationsView({ 
-  reservations, 
-  rooms, 
+function ReservationsView({
+  reservations,
+  rooms,
   onAddReservation,
   onCheckIn,
-  onCheckOut
-}: { 
-  reservations: Reservation[]; 
+  onCheckOut,
+  onCancelReservation
+}: {
+  reservations: Reservation[];
   rooms: Room[];
   onAddReservation: (r: Omit<Reservation, 'id' | 'status'>) => void;
   onCheckIn: (id: string) => void;
   onCheckOut: (id: string) => void;
+  onCancelReservation: (id: string) => void;
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -906,7 +965,7 @@ function ReservationsView({
                 <td className="data-cell text-right">
                   <div className="flex justify-end gap-2">
                     {res.status === 'Confirmed' && (
-                      <button 
+                      <button
                         onClick={() => onCheckIn(res.id)}
                         className="px-3 py-1 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700"
                       >
@@ -914,16 +973,21 @@ function ReservationsView({
                       </button>
                     )}
                     {res.status === 'Checked In' && (
-                      <button 
+                      <button
                         onClick={() => onCheckOut(res.id)}
                         className="px-3 py-1 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700"
                       >
                         Check Out
                       </button>
                     )}
-                    <button className="p-1 hover:bg-slate-200 rounded text-slate-400">
-                      <MoreVertical size={16} />
-                    </button>
+                    {(res.status === 'Confirmed' || res.status === 'Checked In') && (
+                      <button
+                        onClick={() => { if (confirm('Cancel this reservation?')) onCancelReservation(res.id); }}
+                        className="px-3 py-1 bg-red-50 text-red-600 border border-red-200 text-xs font-bold rounded-lg hover:bg-red-100 transition-all"
+                      >
+                        Cancel
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -1182,18 +1246,23 @@ function ReservationsView({
   );
 }
 
-function GuestsView({ 
-  guests, 
-  onAddGuest 
-}: { 
-  guests: Guest[]; 
+function GuestsView({
+  guests,
+  onAddGuest,
+  onUpdateGuest,
+  onDeleteGuest
+}: {
+  guests: Guest[];
   onAddGuest: (g: Omit<Guest, 'id' | 'lastStay' | 'totalSpent'>) => void;
+  onUpdateGuest: (g: Guest) => void;
+  onDeleteGuest: (id: string) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newGuest, setNewGuest] = useState({ 
-    name: '', 
-    email: '', 
+  const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
+  const [newGuest, setNewGuest] = useState({
+    name: '',
+    email: '',
     phone: '',
     address: '',
     nationality: '',
@@ -1212,15 +1281,28 @@ function GuestsView({
     e.preventDefault();
     if (!newGuest.name || !newGuest.email) return;
     onAddGuest(newGuest);
-    setNewGuest({ 
-      name: '', 
-      email: '', 
+    setNewGuest({
+      name: '',
+      email: '',
       phone: '',
       address: '',
       nationality: '',
       idNumber: ''
     });
     setIsAddModalOpen(false);
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGuest) return;
+    onUpdateGuest(editingGuest);
+    setEditingGuest(null);
+  };
+
+  const handleDelete = (guest: Guest) => {
+    if (confirm(`Delete guest "${guest.name}"? This cannot be undone.`)) {
+      onDeleteGuest(guest.id);
+    }
   };
 
   return (
@@ -1323,9 +1405,20 @@ function GuestsView({
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button className="p-2 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 rounded-lg text-slate-400 transition-all">
-                        <MoreVertical size={18} />
-                      </button>
+                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => setEditingGuest({ ...guest })}
+                          className="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-all"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(guest)}
+                          className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 text-xs font-bold rounded-lg hover:bg-red-100 transition-all"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </motion.tr>
                 ))
@@ -1458,6 +1551,110 @@ function GuestsView({
                     className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
                   >
                     Save Guest
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {editingGuest && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setEditingGuest(null)}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-3xl shadow-2xl z-[51] overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <h3 className="font-bold text-slate-900">Edit Guest</h3>
+                <button onClick={() => setEditingGuest(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all">
+                  <X size={20} />
+                </button>
+              </div>
+              <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Full Name</label>
+                  <input
+                    required
+                    type="text"
+                    value={editingGuest.name}
+                    onChange={e => setEditingGuest(prev => prev ? { ...prev, name: e.target.value } : null)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-slate-400 rounded-xl text-sm outline-none transition-all"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Email</label>
+                    <input
+                      required
+                      type="email"
+                      value={editingGuest.email}
+                      onChange={e => setEditingGuest(prev => prev ? { ...prev, email: e.target.value } : null)}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-slate-400 rounded-xl text-sm outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Phone</label>
+                    <input
+                      type="tel"
+                      value={editingGuest.phone}
+                      onChange={e => setEditingGuest(prev => prev ? { ...prev, phone: e.target.value } : null)}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-slate-400 rounded-xl text-sm outline-none transition-all"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Nationality</label>
+                    <input
+                      type="text"
+                      value={editingGuest.nationality || ''}
+                      onChange={e => setEditingGuest(prev => prev ? { ...prev, nationality: e.target.value } : null)}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-slate-400 rounded-xl text-sm outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">ID / Passport</label>
+                    <input
+                      type="text"
+                      value={editingGuest.idNumber || ''}
+                      onChange={e => setEditingGuest(prev => prev ? { ...prev, idNumber: e.target.value } : null)}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-slate-400 rounded-xl text-sm outline-none transition-all"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Address</label>
+                  <input
+                    type="text"
+                    value={editingGuest.address || ''}
+                    onChange={e => setEditingGuest(prev => prev ? { ...prev, address: e.target.value } : null)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-slate-400 rounded-xl text-sm outline-none transition-all"
+                  />
+                </div>
+                <div className="pt-2 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditingGuest(null)}
+                    className="flex-1 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all"
+                  >
+                    Save Changes
                   </button>
                 </div>
               </form>
@@ -1709,16 +1906,18 @@ function BillingView({
   );
 }
 
-function HousekeepingView({ 
-  rooms, 
-  staff, 
+function HousekeepingView({
+  rooms,
+  staff,
   onUpdateStatus,
-  onAssignStaff 
-}: { 
-  rooms: Room[]; 
+  onAssignStaff,
+  currentUser
+}: {
+  rooms: Room[];
   staff: Staff[];
   onUpdateStatus: (id: string, status: Room['status']) => void;
   onAssignStaff: (roomId: string, staffId: string) => void;
+  currentUser: User;
 }) {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
 
@@ -1881,17 +2080,7 @@ function HousekeepingView({
         )}
       </AnimatePresence>
 
-      <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 mt-8">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-indigo-600 text-white rounded-xl">
-            <Wrench size={24} />
-          </div>
-          <div>
-            <h3 className="font-bold text-indigo-900">Maintenance Alert</h3>
-            <p className="text-indigo-700 text-sm">Room 202 requires AC filter replacement. Scheduled for 2:00 PM today.</p>
-          </div>
-        </div>
-      </div>
+      <HousekeepingTasksPanel rooms={rooms} currentUser={currentUser} />
     </div>
   );
 }

@@ -25,7 +25,7 @@ export interface ReservationProduct {
   created_at: string;
 }
 
-export type UserRole = 'Admin' | 'Reception';
+export type UserRole = 'Admin' | 'Manager' | 'Reception';
 export type SubscriptionPlan = 'Free' | 'Basic' | 'Pro';
 
 export interface User {
@@ -76,6 +76,7 @@ export interface Reservation {
   notes?: string;
   createdAt: string;
   createdBy: string;
+  canceled_at?: string;
 }
 
 export interface Guest {
@@ -103,4 +104,16 @@ export interface Transaction {
   amount: number;
   date: string;
   status: 'Paid' | 'Pending';
+}
+
+export interface HousekeepingTask {
+  id: string;
+  hotel_id: string;
+  room_number: string;
+  employee_name: string;
+  task: 'cleaning' | 'maintenance' | 'inspection' | 'turndown';
+  status: 'pending' | 'in_progress' | 'completed';
+  notes: string;
+  assigned_at: string;
+  completed_at: string | null;
 }

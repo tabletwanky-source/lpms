@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Printer, Plus, Trash2 } from 'lucide-react';
+import { X, Printer, Plus, Trash2, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import jsPDF from 'jspdf';
 import { supabase } from '../lib/supabase';
 import { Reservation, Product, ReservationProduct, User } from '../types';
 
@@ -77,6 +78,120 @@ export default function InvoiceModal({ reservation, hotelUser, logoUrl, onClose 
     window.print();
   }
 
+  function handleDownloadPDF() {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 20;
+
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text(hotelUser.hotelName, 14, y);
+    y += 7;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100);
+    doc.text(hotelUser.email, 14, y);
+    y += 5;
+
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0);
+    doc.text('INVOICE', pageWidth - 14, 20, { align: 'right' });
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100);
+    doc.text(`Date: ${today}`, pageWidth - 14, 28, { align: 'right' });
+    doc.text(`Ref: #${reservation.id.slice(-8).toUpperCase()}`, pageWidth - 14, 33, { align: 'right' });
+
+    y += 10;
+    doc.setDrawColor(220);
+    doc.line(14, y, pageWidth - 14, y);
+    y += 8;
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0);
+    doc.text('BILL TO', 14, y);
+    doc.text('STAY DETAILS', pageWidth / 2, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(60);
+    doc.text(reservation.guestName, 14, y);
+    doc.text(`Check-in: ${reservation.checkIn}`, pageWidth / 2, y);
+    y += 5;
+    doc.text(`Room: ${reservation.roomNumber}`, 14, y);
+    doc.text(`Check-out: ${reservation.checkOut}`, pageWidth / 2, y);
+    y += 5;
+    doc.text(`Duration: ${reservation.nights} night(s)`, pageWidth / 2, y);
+
+    y += 12;
+    doc.setDrawColor(0);
+    doc.line(14, y, pageWidth - 14, y);
+    y += 6;
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0);
+    doc.text('DESCRIPTION', 14, y);
+    doc.text('QTY', pageWidth - 60, y, { align: 'center' });
+    doc.text('UNIT', pageWidth - 40, y, { align: 'right' });
+    doc.text('AMOUNT', pageWidth - 14, y, { align: 'right' });
+    y += 4;
+    doc.line(14, y, pageWidth - 14, y);
+    y += 6;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(60);
+    const unitRate = (reservation.total / reservation.nights).toFixed(2);
+    doc.text(`Room ${reservation.roomNumber} — ${reservation.roomType}`, 14, y);
+    doc.text(String(reservation.nights), pageWidth - 60, y, { align: 'center' });
+    doc.text(`$${unitRate}`, pageWidth - 40, y, { align: 'right' });
+    doc.text(`$${reservation.total.toFixed(2)}`, pageWidth - 14, y, { align: 'right' });
+    y += 6;
+
+    lineItems.forEach(item => {
+      doc.text(item.product_name, 14, y);
+      doc.text(String(item.quantity), pageWidth - 60, y, { align: 'center' });
+      doc.text(`$${item.unit_price.toFixed(2)}`, pageWidth - 40, y, { align: 'right' });
+      doc.text(`$${(item.unit_price * item.quantity).toFixed(2)}`, pageWidth - 14, y, { align: 'right' });
+      y += 6;
+    });
+
+    y += 2;
+    doc.line(14, y, pageWidth - 14, y);
+    y += 6;
+
+    const summaryX = pageWidth - 70;
+    doc.setFontSize(9);
+    doc.text('Room charges:', summaryX, y);
+    doc.text(`$${reservation.total.toFixed(2)}`, pageWidth - 14, y, { align: 'right' });
+    y += 5;
+    if (extrasTotal > 0) {
+      doc.text('Extras & services:', summaryX, y);
+      doc.text(`$${extrasTotal.toFixed(2)}`, pageWidth - 14, y, { align: 'right' });
+      y += 5;
+    }
+    if (amountPaid > 0) {
+      doc.setTextColor(60, 140, 100);
+      doc.text('Deposit paid:', summaryX, y);
+      doc.text(`-$${amountPaid.toFixed(2)}`, pageWidth - 14, y, { align: 'right' });
+      y += 5;
+      doc.setTextColor(0);
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text(`BALANCE DUE: $${Math.max(0, balance).toFixed(2)}`, pageWidth - 14, y + 4, { align: 'right' });
+
+    y += 20;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(150);
+    doc.text(`Thank you for staying at ${hotelUser.hotelName}.`, pageWidth / 2, y, { align: 'center' });
+
+    doc.save(`invoice-${reservation.id.slice(-8)}.pdf`);
+  }
+
   const extrasTotal = lineItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
   const grandTotal = reservation.total + extrasTotal;
   const amountPaid = reservation.amountPaid ?? 0;
@@ -113,10 +228,16 @@ export default function InvoiceModal({ reservation, hotelUser, logoUrl, onClose 
             <h3 className="font-bold text-slate-900">Invoice</h3>
             <div className="flex items-center gap-2">
               <button
-                onClick={handlePrint}
-                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all"
+                onClick={handleDownloadPDF}
+                className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all"
               >
-                <Printer size={16} /> Print / Save PDF
+                <Download size={16} /> Download PDF
+              </button>
+              <button
+                onClick={handlePrint}
+                className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-900 transition-all"
+              >
+                <Printer size={16} /> Print
               </button>
               <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full">
                 <X size={20} />

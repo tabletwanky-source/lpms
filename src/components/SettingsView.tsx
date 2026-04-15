@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Upload, Check, CircleAlert as AlertCircle, Hotel, User, Mail, Camera, X } from 'lucide-react';
+import { Upload, Check, CircleAlert as AlertCircle, Hotel, User, Mail, Camera, X, Save } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { User as AppUser } from '../types';
@@ -16,6 +16,15 @@ export default function SettingsView({ user, logoUrl, onLogoChange }: SettingsVi
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [preview, setPreview] = useState<string | null>(logoUrl);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const [profileForm, setProfileForm] = useState({
+    hotelName: user.hotelName,
+    managerName: user.managerName,
+    email: user.email,
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -66,6 +75,34 @@ export default function SettingsView({ user, logoUrl, onLogoChange }: SettingsVi
     if (fileRef.current) fileRef.current.value = '';
   }
 
+  async function handleProfileSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+
+    const updates: Parameters<typeof supabase.auth.updateUser>[0] = {
+      data: {
+        hotel_name: profileForm.hotelName,
+        manager_name: profileForm.managerName,
+      },
+    };
+
+    if (profileForm.email !== user.email) {
+      updates.email = profileForm.email;
+    }
+
+    const { error } = await supabase.auth.updateUser(updates);
+
+    if (error) {
+      setSaveError(error.message);
+    } else {
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    }
+    setSaving(false);
+  }
+
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
@@ -76,36 +113,88 @@ export default function SettingsView({ user, logoUrl, onLogoChange }: SettingsVi
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-100">
           <h2 className="font-bold text-slate-900">Hotel Profile</h2>
+          <p className="text-sm text-slate-500 mt-0.5">Update your hotel name, manager name, and email address.</p>
         </div>
-        <div className="p-6 space-y-5">
-          <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <div className="w-9 h-9 bg-indigo-100 rounded-xl flex items-center justify-center">
-              <Hotel size={18} className="text-indigo-600" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Hotel Name</div>
-              <div className="font-bold text-slate-900">{user.hotelName}</div>
-            </div>
+        <form onSubmit={handleProfileSave} className="p-6 space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+              <Hotel size={12} /> Hotel Name
+            </label>
+            <input
+              type="text"
+              required
+              value={profileForm.hotelName}
+              onChange={e => setProfileForm(p => ({ ...p, hotelName: e.target.value }))}
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-slate-400 rounded-xl text-sm outline-none transition-all"
+              placeholder="e.g. Grand Horizon Hotel"
+            />
           </div>
-          <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <div className="w-9 h-9 bg-emerald-100 rounded-xl flex items-center justify-center">
-              <User size={18} className="text-emerald-600" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Manager</div>
-              <div className="font-bold text-slate-900">{user.managerName}</div>
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+              <User size={12} /> Manager Name
+            </label>
+            <input
+              type="text"
+              required
+              value={profileForm.managerName}
+              onChange={e => setProfileForm(p => ({ ...p, managerName: e.target.value }))}
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-slate-400 rounded-xl text-sm outline-none transition-all"
+              placeholder="e.g. John Smith"
+            />
           </div>
-          <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <div className="w-9 h-9 bg-blue-100 rounded-xl flex items-center justify-center">
-              <Mail size={18} className="text-blue-600" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Email</div>
-              <div className="font-bold text-slate-900">{user.email}</div>
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+              <Mail size={12} /> Email Address
+            </label>
+            <input
+              type="email"
+              required
+              value={profileForm.email}
+              onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))}
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-slate-400 rounded-xl text-sm outline-none transition-all"
+            />
+            {profileForm.email !== user.email && (
+              <p className="text-xs text-amber-600">You will need to confirm the new email address.</p>
+            )}
           </div>
-        </div>
+
+          {saveError && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 text-red-600 text-sm bg-red-50 border border-red-200 px-4 py-2.5 rounded-xl"
+            >
+              <AlertCircle size={15} />
+              {saveError}
+            </motion.div>
+          )}
+
+          {saveSuccess && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 text-emerald-600 text-sm bg-emerald-50 border border-emerald-200 px-4 py-2.5 rounded-xl"
+            >
+              <Check size={15} />
+              Profile saved successfully
+            </motion.div>
+          )}
+
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex items-center gap-2 bg-slate-900 text-white px-6 py-2.5 rounded-xl font-semibold text-sm hover:bg-slate-800 disabled:opacity-60 transition-all"
+            >
+              {saving ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Save size={16} />
+              )}
+              {saving ? 'Saving...' : 'Save Profile'}
+            </button>
+          </div>
+        </form>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -145,7 +234,7 @@ export default function SettingsView({ user, logoUrl, onLogoChange }: SettingsVi
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
-                className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 transition-all"
+                className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-slate-800 disabled:opacity-60 transition-all"
               >
                 {uploading ? (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -210,7 +299,7 @@ export default function SettingsView({ user, logoUrl, onLogoChange }: SettingsVi
           {user.plan !== 'Pro' && (
             <a
               href="/pricing"
-              className="mt-4 inline-flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-all"
+              className="mt-4 inline-flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-slate-800 transition-all"
             >
               Upgrade Plan
             </a>
