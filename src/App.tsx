@@ -3,12 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { LayoutDashboard, Calendar, Users, CreditCard, Hop as Home, LogOut, Bell, Search, Settings, Plus, MoveVertical as MoreVertical, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Wrench, Mail, Phone, CalendarDays, DollarSign, X, ListFilter as Filter, Download, UserPlus, ChartBar as BarChart3, TrendingUp, ChartPie as PieChart, Shield, Printer, Hotel, User as UserIcon, Lock, Menu, Package, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { View, Room, Reservation, Guest, Transaction, TransactionType, Staff, User, UserRole, SubscriptionPlan, HousekeepingTask } from './types';
-import { MOCK_ROOMS, MOCK_RESERVATIONS, MOCK_GUESTS, MOCK_TRANSACTIONS, MOCK_STAFF } from './mockData';
+import { MOCK_STAFF } from './mockData';
+import * as db from './lib/db';
 import AuthPage from './components/auth/AuthPage';
 import AdminView from './components/AdminView';
 import PlanSelector from './components/subscription/PlanSelector';
@@ -92,80 +93,53 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   
-  // Rooms State with LocalStorage
-  const [rooms, setRooms] = useState<Room[]>(() => {
-    const saved = localStorage.getItem('lumina_rooms');
-    return saved ? JSON.parse(saved) : MOCK_ROOMS;
-  });
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [guests, setGuests] = useState<Guest[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [dataLoading, setDataLoading] = useState(false);
 
-  // Reservations State with LocalStorage
-  const [reservations, setReservations] = useState<Reservation[]>(() => {
-    const saved = localStorage.getItem('lumina_reservations');
-    return saved ? JSON.parse(saved) : MOCK_RESERVATIONS;
-  });
-
-  // Guest State with LocalStorage
-  const [guests, setGuests] = useState<Guest[]>(() => {
-    const saved = localStorage.getItem('lumina_guests');
-    return saved ? JSON.parse(saved) : MOCK_GUESTS;
-  });
-
-  // Transactions State with LocalStorage
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem('lumina_transactions');
-    return saved ? JSON.parse(saved) : MOCK_TRANSACTIONS;
-  });
-
-  // Staff State with LocalStorage
   const [staff, setStaff] = useState<Staff[]>(() => {
     const saved = localStorage.getItem('lumina_staff');
     return saved ? JSON.parse(saved) : MOCK_STAFF;
   });
 
   useEffect(() => {
-    localStorage.setItem('lumina_rooms', JSON.stringify(rooms));
-  }, [rooms]);
-
-  useEffect(() => {
-    localStorage.setItem('lumina_reservations', JSON.stringify(reservations));
-  }, [reservations]);
-
-  useEffect(() => {
-    localStorage.setItem('lumina_guests', JSON.stringify(guests));
-  }, [guests]);
-
-  useEffect(() => {
-    localStorage.setItem('lumina_transactions', JSON.stringify(transactions));
-  }, [transactions]);
-
-  useEffect(() => {
     localStorage.setItem('lumina_staff', JSON.stringify(staff));
   }, [staff]);
 
-  useEffect(() => {
+  const loadHotelData = useCallback(async () => {
+    if (!user) return;
+    setDataLoading(true);
+    const [roomsData, guestsData, resData, transData] = await Promise.all([
+      db.getRooms(user.id),
+      db.getGuests(user.id),
+      db.getReservations(user.id),
+      db.getTransactions(user.id),
+    ]);
     const tenDaysAgo = new Date();
     tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
-    setReservations(prev => prev.filter(r => {
+    const visibleRes = resData.filter(r => {
       if (r.status !== 'Cancelled' || !r.canceled_at) return true;
       return new Date(r.canceled_at) >= tenDaysAgo;
-    }));
-  }, []);
+    });
+    setRooms(roomsData);
+    setGuests(guestsData);
+    setReservations(visibleRes);
+    setTransactions(transData);
+    setDataLoading(false);
+  }, [user]);
 
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    setReservations(prev => prev.map(r => {
-      if (r.status === 'Confirmed' && r.checkIn <= today) {
-        return { ...r, status: 'Checked In' as const };
-      }
-      if (r.status === 'Checked In' && r.checkOut < today) {
-        setRooms(prev2 => prev2.map(room =>
-          room.number === r.roomNumber ? { ...room, status: 'Dirty' as Room['status'] } : room
-        ));
-        return { ...r, status: 'Checked Out' as const };
-      }
-      return r;
-    }));
-  }, []);
+    if (user) {
+      loadHotelData();
+    } else {
+      setRooms([]);
+      setGuests([]);
+      setReservations([]);
+      setTransactions([]);
+    }
+  }, [user]);
 
   const SUPER_ADMIN_EMAIL = 'wankyacademy@gmail.com';
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
@@ -183,142 +157,150 @@ export default function App() {
     return true;
   };
 
-  const addGuest = (newGuest: Omit<Guest, 'id' | 'lastStay' | 'totalSpent'>) => {
+  const addGuest = async (newGuest: Omit<Guest, 'id' | 'lastStay' | 'totalSpent'>) => {
+    if (!user) return;
     if (!checkPlanLimit()) {
       alert('Guest limit reached for your plan. Please upgrade!');
       return;
     }
-    const guest: Guest = {
-      ...newGuest,
-      id: `g-${Date.now()}`,
-      lastStay: 'Never',
-      totalSpent: 0
-    };
-    setGuests(prev => [guest, ...prev]);
+    const created = await db.createGuest(user.id, newGuest);
+    if (created) setGuests(prev => [created, ...prev]);
   };
 
-  const updateGuest = (updatedGuest: Guest) => {
+  const updateGuest = async (updatedGuest: Guest) => {
+    if (!user) return;
     setGuests(prev => prev.map(g => g.id === updatedGuest.id ? updatedGuest : g));
+    await db.updateGuest(user.id, updatedGuest);
   };
 
-  const deleteGuest = (id: string) => {
+  const deleteGuest = async (id: string) => {
+    if (!user) return;
     setGuests(prev => prev.filter(g => g.id !== id));
+    await db.deleteGuest(user.id, id);
   };
 
-  const cancelReservation = (id: string) => {
-    setReservations(prev => prev.map(r =>
-      r.id === id ? { ...r, status: 'Cancelled' as const, canceled_at: new Date().toISOString() } : r
-    ));
+  const cancelReservation = async (id: string) => {
+    if (!user) return;
     const res = reservations.find(r => r.id === id);
+    const canceledAt = new Date().toISOString();
+    setReservations(prev => prev.map(r =>
+      r.id === id ? { ...r, status: 'Cancelled' as const, canceled_at: canceledAt } : r
+    ));
+    await db.updateReservationStatus(user.id, id, 'Cancelled', { canceled_at: canceledAt });
     if (res) {
-      setRooms(prev => prev.map(room =>
-        room.number === res.roomNumber && room.status === 'Occupied' ? { ...room, status: 'Available' } : room
-      ));
+      const room = rooms.find(r => r.number === res.roomNumber && r.status === 'Occupied');
+      if (room) {
+        const updated = { ...room, status: 'Available' as Room['status'] };
+        setRooms(prev => prev.map(r => r.id === room.id ? updated : r));
+        await db.updateRoom(user.id, updated);
+      }
     }
   };
 
-  const addRoom = (newRoom: Omit<Room, 'id' | 'status'>) => {
-    const room: Room = {
-      ...newRoom,
-      id: `room-${Date.now()}`,
-      status: 'Available'
-    };
-    setRooms(prev => [...prev, room]);
+  const addRoom = async (newRoom: Omit<Room, 'id' | 'status'>) => {
+    if (!user) return;
+    const created = await db.createRoom(user.id, newRoom);
+    if (created) setRooms(prev => [...prev, created]);
   };
 
-  const updateRoom = (updatedRoom: Room) => {
+  const updateRoom = async (updatedRoom: Room) => {
+    if (!user) return;
     setRooms(prev => prev.map(r => r.id === updatedRoom.id ? updatedRoom : r));
+    await db.updateRoom(user.id, updatedRoom);
   };
 
-  const deleteRoom = (id: string) => {
+  const deleteRoom = async (id: string) => {
+    if (!user) return;
     setRooms(prev => prev.filter(r => r.id !== id));
+    await db.deleteRoom(user.id, id);
   };
 
-  const addReservation = (newRes: Omit<Reservation, 'id' | 'status'>) => {
-    const resId = `res-${Date.now()}`;
-    const res: Reservation = {
-      ...newRes,
-      id: resId,
-      status: 'Confirmed'
-    };
-    setReservations(prev => [res, ...prev]);
+  const addReservation = async (newRes: Omit<Reservation, 'id' | 'status'>) => {
+    if (!user) return;
+    const created = await db.createReservation(user.id, newRes);
+    if (!created) return;
+    setReservations(prev => [created, ...prev]);
 
-    // Add initial room charge transaction
-    const transaction: Transaction = {
-      id: `t-${Date.now()}`,
-      reservationId: resId,
-      guestName: res.guestName,
-      type: 'Room',
-      description: `Room Charge - ${res.roomNumber}`,
-      amount: res.total,
-      date: res.checkIn,
-      status: 'Pending'
-    };
-
-    // Add payment transaction if amountPaid > 0
-    const transactionsToAdd = [transaction];
-    if (res.amountPaid > 0) {
-      transactionsToAdd.push({
-        id: `t-pay-${Date.now()}`,
-        reservationId: resId,
-        guestName: res.guestName,
+    const txItems: Omit<Transaction, 'id' | 'date' | 'status'>[] = [
+      {
+        reservationId: created.id,
+        guestName: created.guestName,
+        type: 'Room',
+        description: `Room Charge - ${created.roomNumber}`,
+        amount: created.total,
+      },
+    ];
+    if (created.amountPaid > 0) {
+      txItems.push({
+        reservationId: created.id,
+        guestName: created.guestName,
         type: 'Deposit',
-        description: `Initial Payment (${res.paymentMethod})`,
-        amount: -res.amountPaid,
-        date: res.checkIn,
-        status: 'Paid'
+        description: `Initial Payment (${created.paymentMethod})`,
+        amount: -created.amountPaid,
       });
     }
-
-    setTransactions(prev => [...transactionsToAdd, ...prev]);
+    const newTxs = await db.createTransactions(user.id, txItems);
+    if (newTxs.length > 0) setTransactions(prev => [...newTxs, ...prev]);
   };
 
-  const addTransaction = (newTrans: Omit<Transaction, 'id' | 'date' | 'status'>) => {
-    const transaction: Transaction = {
-      ...newTrans,
-      id: `t-${Date.now()}`,
-      date: new Date().toISOString().split('T')[0],
-      status: 'Pending'
-    };
-    setTransactions(prev => [transaction, ...prev]);
+  const addTransaction = async (newTrans: Omit<Transaction, 'id' | 'date' | 'status'>) => {
+    if (!user) return;
+    const created = await db.createTransaction(user.id, newTrans);
+    if (created) setTransactions(prev => [created, ...prev]);
   };
 
-  const handleCheckIn = (resId: string) => {
+  const handleCheckIn = async (resId: string) => {
+    if (!user) return;
     const res = reservations.find(r => r.id === resId);
     if (!res) return;
-
-    setReservations(prev => prev.map(r => 
+    setReservations(prev => prev.map(r =>
       r.id === resId ? { ...r, status: 'Checked In' } : r
     ));
-
-    setRooms(prev => prev.map(room => 
-      room.number === res.roomNumber ? { ...room, status: 'Occupied' } : room
-    ));
+    await db.updateReservationStatus(user.id, resId, 'Checked In');
+    const room = rooms.find(r => r.number === res.roomNumber);
+    if (room) {
+      const updated = { ...room, status: 'Occupied' as Room['status'] };
+      setRooms(prev => prev.map(r => r.id === room.id ? updated : r));
+      await db.updateRoom(user.id, updated);
+    }
   };
 
-  const handleCheckOut = (resId: string) => {
+  const handleCheckOut = async (resId: string) => {
+    if (!user) return;
     const res = reservations.find(r => r.id === resId);
     if (!res) return;
-
-    setReservations(prev => prev.map(r => 
+    setReservations(prev => prev.map(r =>
       r.id === resId ? { ...r, status: 'Checked Out' } : r
     ));
-
-    setRooms(prev => prev.map(room => 
-      room.number === res.roomNumber ? { ...room, status: 'Dirty' } : room
-    ));
+    await db.updateReservationStatus(user.id, resId, 'Checked Out');
+    const room = rooms.find(r => r.number === res.roomNumber);
+    if (room) {
+      const updated = { ...room, status: 'Dirty' as Room['status'] };
+      setRooms(prev => prev.map(r => r.id === room.id ? updated : r));
+      await db.updateRoom(user.id, updated);
+    }
   };
 
-  const updateRoomStatus = (roomId: string, status: Room['status']) => {
-    setRooms(prev => prev.map(room => 
-      room.id === roomId ? { ...room, status, lastCleaned: status === 'Available' ? new Date().toLocaleString() : room.lastCleaned } : room
-    ));
+  const updateRoomStatus = async (roomId: string, status: Room['status']) => {
+    if (!user) return;
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) return;
+    const updated = {
+      ...room,
+      status,
+      lastCleaned: status === 'Available' ? new Date().toLocaleString() : room.lastCleaned,
+    };
+    setRooms(prev => prev.map(r => r.id === roomId ? updated : r));
+    await db.updateRoom(user.id, updated);
   };
 
-  const assignStaffToRoom = (roomId: string, staffId: string) => {
-    setRooms(prev => prev.map(room => 
-      room.id === roomId ? { ...room, assignedStaffId: staffId } : room
-    ));
+  const assignStaffToRoom = async (roomId: string, staffId: string) => {
+    if (!user) return;
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) return;
+    const updated = { ...room, assignedStaffId: staffId };
+    setRooms(prev => prev.map(r => r.id === roomId ? updated : r));
+    await db.updateRoom(user.id, updated);
   };
 
   const navItems = [
