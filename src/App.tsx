@@ -38,21 +38,75 @@ import {
   Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { View, Room, Reservation, Guest, Transaction, TransactionType, Staff, User, UserRole, SubscriptionPlan } from './types';
 import { MOCK_ROOMS, MOCK_RESERVATIONS, MOCK_GUESTS, MOCK_TRANSACTIONS, MOCK_STAFF } from './mockData';
-import AuthView from './components/AuthView';
+import AuthPage from './components/auth/AuthPage';
 import AdminView from './components/AdminView';
+import PlanSelector from './components/subscription/PlanSelector';
+import SuccessPage from './components/subscription/SuccessPage';
+import { supabase } from './lib/supabase';
+import { getProductByPriceId } from './stripe-config';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('lumina_current_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [subscription, setSubscription] = useState<any>(null);
+  const [showPricingModal, setShowPricingModal] = useState(false);
 
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('lumina_users');
-    return saved ? JSON.parse(saved) : [];
-  });
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchSubscription();
+    }
+  }, [user]);
+
+  const fetchSubscription = async () => {
+    try {
+      const { data } = await supabase
+        .from('stripe_user_subscriptions')
+        .select('*')
+        .maybeSingle();
+      
+      setSubscription(data);
+    } catch (error) {
+      console.error('Error fetching subscription:', error);
+    }
+  };
+
+  const currentUser = user ? {
+    id: user.id,
+    email: user.email!,
+    hotelName: user.user_metadata?.hotel_name || 'My Hotel',
+    managerName: user.user_metadata?.manager_name || user.email?.split('@')[0] || 'Manager',
+    role: 'Admin' as UserRole,
+    plan: getCurrentPlan(),
+    password: '',
+    createdAt: user.created_at
+  } : null;
+
+  function getCurrentPlan(): SubscriptionPlan {
+    if (!subscription?.price_id) return 'Free';
+    const product = getProductByPriceId(subscription.price_id);
+    if (product?.name === 'LMS2') return 'Pro';
+    if (product?.name === 'LMS') return 'Basic';
+    return 'Free';
+  }
 
   const [currentView, setCurrentView] = useState<View>('Dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -88,14 +142,6 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem('lumina_current_user', JSON.stringify(currentUser));
-  }, [currentUser]);
-
-  useEffect(() => {
-    localStorage.setItem('lumina_users', JSON.stringify(users));
-  }, [users]);
-
-  useEffect(() => {
     localStorage.setItem('lumina_rooms', JSON.stringify(rooms));
   }, [rooms]);
 
@@ -115,31 +161,8 @@ export default function App() {
     localStorage.setItem('lumina_staff', JSON.stringify(staff));
   }, [staff]);
 
-  const handleLogin = (email: string, pass: string) => {
-    const user = users.find(u => u.email === email && u.password === pass);
-    if (user) {
-      setCurrentUser(user);
-      setCurrentView('Dashboard');
-    } else {
-      alert('Invalid credentials');
-    }
-  };
-
-  const handleRegister = (newUser: Omit<User, 'id' | 'createdAt' | 'role' | 'plan'>) => {
-    const user: User = {
-      ...newUser,
-      id: `u-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      role: 'Admin',
-      plan: 'Free'
-    };
-    setUsers(prev => [...prev, user]);
-    setCurrentUser(user);
-    setCurrentView('Dashboard');
-  };
-
   const handleLogout = () => {
-    setCurrentUser(null);
+    supabase.auth.signOut();
   };
 
   const checkPlanLimit = () => {
@@ -278,11 +301,132 @@ export default function App() {
     ...(currentUser?.role === 'Admin' ? [{ id: 'Admin', icon: Shield, label: 'Room Management' }] : []),
   ];
 
-  if (!currentUser) {
-    return <AuthView onLogin={handleLogin} onRegister={handleRegister} />;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/auth" element={<AuthPage />} />
+          <Route path="*" element={<Navigate to="/auth" replace />} />
+        </Routes>
+      </BrowserRouter>
+    );
   }
 
   return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/success" element={<SuccessPage />} />
+        <Route path="/pricing" element={
+          <div className="min-h-screen bg-slate-50 p-8">
+            <PlanSelector currentPriceId={subscription?.price_id} />
+          </div>
+        } />
+        <Route path="/" element={
+          <MainApp 
+            currentUser={currentUser!}
+            currentView={currentView}
+            setCurrentView={setCurrentView}
+            isSidebarOpen={isSidebarOpen}
+            setIsSidebarOpen={setIsSidebarOpen}
+            handleLogout={handleLogout}
+            showPricingModal={showPricingModal}
+            setShowPricingModal={setShowPricingModal}
+            subscription={subscription}
+            // ... all other props
+            guests={guests}
+            onAddGuest={addGuest}
+            rooms={rooms}
+            reservations={reservations}
+            onAddReservation={addReservation}
+            onCheckIn={handleCheckIn}
+            onCheckOut={handleCheckOut}
+            transactions={transactions}
+            onAddTransaction={addTransaction}
+            staff={staff}
+            onUpdateRoomStatus={updateRoomStatus}
+            onAssignStaff={assignStaffToRoom}
+            onAddRoom={addRoom}
+            onUpdateRoom={updateRoom}
+            onDeleteRoom={deleteRoom}
+          />
+        } />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+function MainApp({ 
+  currentUser, 
+  currentView, 
+  setCurrentView, 
+  isSidebarOpen, 
+  setIsSidebarOpen,
+  handleLogout,
+  showPricingModal,
+  setShowPricingModal,
+  subscription,
+  guests,
+  onAddGuest,
+  rooms,
+  reservations,
+  onAddReservation,
+  onCheckIn,
+  onCheckOut,
+  transactions,
+  onAddTransaction,
+  staff,
+  onUpdateRoomStatus,
+  onAssignStaff,
+  onAddRoom,
+  onUpdateRoom,
+  onDeleteRoom
+}: {
+  currentUser: User;
+  currentView: View;
+  setCurrentView: (view: View) => void;
+  isSidebarOpen: boolean;
+  setIsSidebarOpen: (open: boolean) => void;
+  handleLogout: () => void;
+  showPricingModal: boolean;
+  setShowPricingModal: (show: boolean) => void;
+  subscription: any;
+  guests: Guest[];
+  onAddGuest: (g: Omit<Guest, 'id' | 'lastStay' | 'totalSpent'>) => void;
+  rooms: Room[];
+  reservations: Reservation[];
+  onAddReservation: (r: Omit<Reservation, 'id' | 'status'>) => void;
+  onCheckIn: (id: string) => void;
+  onCheckOut: (id: string) => void;
+  transactions: Transaction[];
+  onAddTransaction: (t: Omit<Transaction, 'id' | 'date' | 'status'>) => void;
+  staff: Staff[];
+  onUpdateRoomStatus: (roomId: string, status: Room['status']) => void;
+  onAssignStaff: (roomId: string, staffId: string) => void;
+  onAddRoom: (r: Omit<Room, 'id' | 'status'>) => void;
+  onUpdateRoom: (r: Room) => void;
+  onDeleteRoom: (id: string) => void;
+}) {
+  const navItems = [
+    { id: 'Dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { id: 'Reservations', icon: Calendar, label: 'Reservations' },
+    { id: 'Guests', icon: Users, label: 'Guests' },
+    { id: 'Billing', icon: CreditCard, label: 'Billing' },
+    { id: 'Housekeeping', icon: Home, label: 'Housekeeping' },
+    { id: 'Reports', icon: BarChart3, label: 'Reports' },
+    ...(currentUser?.role === 'Admin' ? [{ id: 'Admin', icon: Shield, label: 'Room Management' }] : []),
+  ];
+
+  return (
+    <>
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
       {/* Sidebar */}
       <motion.aside 
@@ -297,125 +441,6 @@ export default function App() {
 
         <nav className="flex-1 px-3 mt-4 space-y-1">
           {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setCurrentView(item.id as View)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
-                currentView === item.id 
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' 
-                  : 'hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <item.icon size={20} />
-              {isSidebarOpen && <span className="font-medium">{item.label}</span>}
-            </button>
-          ))}
-        </nav>
-
-        <div className="p-4 border-t border-slate-800">
-          <div className="mb-4 px-3">
-            {isSidebarOpen && (
-              <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Current Plan</p>
-                <div className="flex items-center justify-between">
-                  <span className={`text-xs font-bold ${
-                    currentUser.plan === 'Pro' ? 'text-purple-400' : 
-                    currentUser.plan === 'Basic' ? 'text-blue-400' : 'text-emerald-400'
-                  }`}>{currentUser.plan} Plan</span>
-                  <span className="text-[10px] text-slate-400">{guests.length}/{currentUser.plan === 'Free' ? 10 : currentUser.plan === 'Basic' ? 30 : 60} Guests</span>
-                </div>
-              </div>
-            )}
-          </div>
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-all">
-            <Settings size={20} />
-            {isSidebarOpen && <span className="font-medium">Settings</span>}
-          </button>
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-red-900/20 hover:text-red-400 transition-all mt-1"
-          >
-            <LogOut size={20} />
-            {isSidebarOpen && <span className="font-medium">Logout</span>}
-          </button>
-        </div>
-      </motion.aside>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 z-10">
-          <div className="flex items-center gap-4 flex-1">
-            <button 
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 hover:bg-slate-100 rounded-lg text-slate-500"
-            >
-              <Search size={20} />
-            </button>
-            <div className="relative max-w-md w-full hidden md:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input 
-                type="text" 
-                placeholder="Search reservations, guests, rooms..." 
-                className="w-full pl-10 pr-4 py-2 bg-slate-100 border-transparent focus:bg-white focus:border-indigo-500 rounded-xl text-sm transition-all outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <button className="relative p-2 hover:bg-slate-100 rounded-lg text-slate-500">
-              <Bell size={20} />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-            </button>
-            <div className="h-8 w-px bg-slate-200 mx-2"></div>
-            <div className="flex items-center gap-3">
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-semibold text-slate-900">{currentUser.managerName}</p>
-                <p className="text-xs text-slate-500">{currentUser.hotelName} • {currentUser.role}</p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-indigo-100 border-2 border-white shadow-sm flex items-center justify-center text-indigo-700 font-bold">
-                {currentUser.managerName.split(' ').map(n => n[0]).join('')}
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* View Content */}
-        <main className="flex-1 overflow-y-auto p-8">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentView}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-            >
-              <ViewRenderer 
-                view={currentView} 
-                guests={guests} 
-                onAddGuest={addGuest}
-                rooms={rooms}
-                reservations={reservations}
-                onAddReservation={addReservation}
-                onCheckIn={handleCheckIn}
-                onCheckOut={handleCheckOut}
-                transactions={transactions}
-                onAddTransaction={addTransaction}
-                staff={staff}
-                onUpdateRoomStatus={updateRoomStatus}
-                onAssignStaff={assignStaffToRoom}
-                onAddRoom={addRoom}
-                onUpdateRoom={updateRoom}
-                onDeleteRoom={deleteRoom}
-                currentUser={currentUser}
-              />
-            </motion.div>
-          </AnimatePresence>
-        </main>
-      </div>
-    </div>
-  );
-}
 
 function ViewRenderer({ 
   view, 
